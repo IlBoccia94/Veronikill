@@ -6,14 +6,35 @@ export type HUDState = {
   hp: number; maxHP: number; score: number; kills: number; progress: number;
   rocketLevel: number; bladeLevel: number; elapsed: number;
   shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
+  level: number; xp: number; xpNeeded: number;
+  damageRank: number; fireRateRank: number; movementRank: number; armorRank: number; maxHP: number;
 };
 export type RunResult = { outcome: 'won' | 'lost'; score: number; kills: number; seconds: number };
+
+export type UpgradeId =
+  | 'rocket' | 'blades' | 'damage' | 'fire-rate'
+  | 'movement' | 'max-health' | 'armor' | 'heal';
+
+export interface UpgradeOption {
+  id: UpgradeId;
+  title: string;
+  description: string;
+  icon: string;
+  rarity: 'Arma' | 'Passivo' | 'Recupero';
+}
+
+export interface LevelUpChoice {
+  level: number;
+  options: UpgradeOption[];
+}
+
 
 export interface GamePorts {
   move: () => StickVector;
   aim: () => AimState;
   onHUD: (hud: HUDState) => void;
   onEnd: (result: RunResult) => void;
+  onLevelUp: (event: LevelUpChoice) => void;
 }
 
 type EnemyKind = 'commesso' | 'capo' | 'cliente';
@@ -33,7 +54,7 @@ type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
 
 const WIDTH = 960;
 const HEIGHT = 900;
-const FINISH_X = 7600;
+const FINISH_X = 25000;
 const ROAD_TOP = 120;
 const ROAD_BOTTOM = 780;
 
@@ -76,6 +97,16 @@ export class GameScene extends Phaser.Scene {
   private speedUntil = 0;
   private rapidUntil = 0;
   private winTriggered = false;
+  private maxHP = 100;
+  private xp = 0;
+  private level = 1;
+  private awaitingUpgrade = false;
+  private offeredUpgrades: UpgradeOption[] = [];
+  private damageRank = 0;
+  private fireRateRank = 0;
+  private movementRank = 0;
+  private armorRank = 0;
+
 
   constructor(ports: GamePorts) {
     super({ key: 'Game' });
@@ -116,7 +147,16 @@ export class GameScene extends Phaser.Scene {
 
   startRun(): void {
     this.destroyDynamic();
-    this.health = 100;
+    this.maxHP = 100;
+    this.health = this.maxHP;
+    this.level = 1;
+    this.xp = 0;
+    this.awaitingUpgrade = false;
+    this.offeredUpgrades = [];
+    this.damageRank = 0;
+    this.fireRateRank = 0;
+    this.movementRank = 0;
+    this.armorRank = 0;
     this.score = 0;
     this.kills = 0;
     this.elapsed = 0;
@@ -149,9 +189,96 @@ export class GameScene extends Phaser.Scene {
 
   get isPaused(): boolean { return this.pausedRun; }
   get isRunning(): boolean { return this.running; }
+  get isChoosingUpgrade(): boolean { return this.awaitingUpgrade; }
+
+  // The XP remaining after a level-up is carried into the next level.
+  private xpNeeded(level = this.level): number {
+    return Math.round(40 + (level - 1) * 24 + Math.pow(level - 1, 1.35) * 5);
+  }
+
+  private availableUpgrades(): UpgradeOption[] {
+    const all: UpgradeOption[] = [
+      { id: 'rocket', title: 'Missili a ricerca', description: 'Sblocca o migliora i missili automatici.', icon: '🚀', rarity: 'Arma' },
+      { id: 'blades', title: 'Lame orbitanti', description: 'Più lame e più danni intorno a Veronica.', icon: '🔪', rarity: 'Arma' },
+      { id: 'damage', title: 'Proiettili rinforzati', description: '+4 danni per ogni colpo del mitra.', icon: '💥', rarity: 'Passivo' },
+      { id: 'fire-rate', title: 'Grilletto facile', description: '+12% velocità di fuoco permanente.', icon: '⚡', rarity: 'Passivo' },
+      { id: 'movement', title: 'Scarpe da corsa', description: '+7% velocità di movimento permanente.', icon: '👟', rarity: 'Passivo' },
+      { id: 'max-health', title: 'Copertina rigida', description: '+20 salute massima e recuperi 20 HP.', icon: '❤️', rarity: 'Passivo' },
+      { id: 'armor', title: 'Recensioni blindate', description: '-12% danni subiti (cumulabile).', icon: '🛡️', rarity: 'Passivo' },
+      { id: 'heal', title: 'Pausa ristoro', description: 'Recupera 40 punti salute subito.', icon: '☕', rarity: 'Recupero' }
+    ];
+    return all.filter(option => {
+      switch (option.id) {
+        case 'rocket': return this.rocketLevel < 3;
+        case 'blades': return this.bladeLevel < 3;
+        case 'damage': return this.damageRank < 6;
+        case 'fire-rate': return this.fireRateRank < 5;
+        case 'movement': return this.movementRank < 5;
+        case 'max-health': return this.maxHP < 200;
+        case 'armor': return this.armorRank < 4;
+        case 'heal': return this.health <= this.maxHP - 12;
+      }
+    });
+  }
+
+  private createLevelUpChoice(): void {
+    if (!this.running || this.awaitingUpgrade || this.xp < this.xpNeeded()) return;
+    this.xp -= this.xpNeeded();
+    this.level += 1;
+    const pool = this.availableUpgrades();
+    Phaser.Utils.Array.Shuffle(pool);
+    this.offeredUpgrades = pool.slice(0, 3);
+    this.awaitingUpgrade = true;
+    this.emitHUD();
+    this.ports.onLevelUp({ level: this.level, options: this.offeredUpgrades.map(option => ({ ...option })) });
+  }
+
+  chooseUpgrade(id: UpgradeId): boolean {
+    if (!this.running || !this.awaitingUpgrade || !this.offeredUpgrades.some(option => option.id === id)) return false;
+    switch (id) {
+      case 'rocket':
+        this.rocketLevel = Math.min(3, this.rocketLevel + 1);
+        break;
+      case 'blades':
+        this.bladeLevel = Math.min(3, this.bladeLevel + 1);
+        this.rebuildBlades();
+        break;
+      case 'damage':
+        this.damageRank++;
+        break;
+      case 'fire-rate':
+        this.fireRateRank++;
+        break;
+      case 'movement':
+        this.movementRank++;
+        break;
+      case 'max-health':
+        this.maxHP += 20;
+        this.health = Math.min(this.maxHP, this.health + 20);
+        break;
+      case 'armor':
+        this.armorRank++;
+        break;
+      case 'heal':
+        this.health = Math.min(this.maxHP, this.health + 40);
+        break;
+    }
+    this.awaitingUpgrade = false;
+    this.offeredUpgrades = [];
+    this.emitHUD();
+    // Multiple levels gained from a single high-XP event are handled in sequence.
+    this.createLevelUpChoice();
+    return true;
+  }
+
+  private awardXP(points: number): void {
+    this.xp += points;
+    this.emitHUD();
+    this.createLevelUpChoice();
+  }
 
   update(_time: number, deltaMs: number): void {
-    if (!this.running || this.pausedRun) return;
+    if (!this.running || this.pausedRun || this.awaitingUpgrade) return;
     if (window.matchMedia('(pointer: coarse)').matches && window.innerHeight > window.innerWidth) return;
 
     const dt = Math.min(deltaMs / 1000, 0.05);
@@ -189,7 +316,7 @@ export class GameScene extends Phaser.Scene {
     if (magnitude > 1) {
       move.x /= magnitude; move.y /= magnitude;
     }
-    const speed = this.elapsed < this.speedUntil ? 340 : 255;
+    const speed = (this.elapsed < this.speedUntil ? 340 : 255) * (1 + this.movementRank * 0.07);
     this.player.x = Phaser.Math.Clamp(this.player.x + move.x * speed * dt, 90, FINISH_X);
     this.player.y = Phaser.Math.Clamp(this.player.y + move.y * speed * dt, ROAD_TOP + 34, ROAD_BOTTOM - 34);
     this.playerShadow.setPosition(this.player.x + 1, this.player.y + 20);
@@ -216,13 +343,13 @@ export class GameScene extends Phaser.Scene {
   private updateWeapons(dt: number): void {
     this.fireTimer -= dt;
     if (this.fireTimer <= 0 && this.shots.length < 140) {
-      this.fireTimer = this.elapsed < this.rapidUntil ? 0.085 : 0.165;
+      this.fireTimer = (this.elapsed < this.rapidUntil ? 0.085 : 0.165) * Math.pow(0.88, this.fireRateRank);
       const angle = this.aimAngle + randomBetween(-3, 3) * Math.PI / 180;
       const muzzle = 35;
       this.addShot(
         this.player.x + Math.cos(angle) * muzzle,
         this.player.y + Math.sin(angle) * muzzle,
-        angle, 840, 15, 'player', false
+        angle, 840, 15 + 4 * this.damageRank, 'player', false
       );
     }
 
@@ -258,7 +385,7 @@ export class GameScene extends Phaser.Scene {
     this.spawnTimer -= dt;
     const progress = this.player.x / FINISH_X;
     if (this.spawnTimer <= 0 && progress < 0.95) {
-      this.spawnTimer = Math.max(0.50, 1.54 - progress * 0.8);
+      this.spawnTimer = Math.max(0.48, 1.54 - progress * 0.82);
       if (this.enemies.length < 28) this.spawnEnemy(progress);
     }
 
@@ -397,7 +524,7 @@ export class GameScene extends Phaser.Scene {
           this.rebuildBlades();
           this.popText(pick.sprite.x, pick.sprite.y, 'LAME LV.' + this.bladeLevel, '#f9a8ff');
         } else if (pick.kind === 'heal') {
-          this.health = Math.min(100, this.health + 30);
+          this.health = Math.min(this.maxHP, this.health + 30);
           this.popText(pick.sprite.x, pick.sprite.y, '+30 HP', '#6affcf');
         } else if (pick.kind === 'shield') {
           this.shieldUntil = Math.max(this.shieldUntil, this.elapsed) + 8;
@@ -443,7 +570,7 @@ export class GameScene extends Phaser.Scene {
       sprite.setScale(width / sprite.width);
     }
     this.enemies.push({
-      sprite, kind, hp: spec.hp, speed: spec.speed, damage: spec.damage, phase: Math.random() * Math.PI * 2,
+      sprite, kind, hp: Math.round(spec.hp * (1 + progress * 0.55)), speed: spec.speed * (1 + progress * 0.14), damage: spec.damage, phase: Math.random() * Math.PI * 2,
       cooldown: kind === 'cliente' ? 1.5 : 3.3, warning: 0, charge: 0, lastBlade: -5, dead: false
     });
   }
@@ -470,9 +597,11 @@ export class GameScene extends Phaser.Scene {
       const pos = { x: enemy.sprite.x, y: enemy.sprite.y };
       enemy.sprite.destroy();
       this.kills++;
+      const xpGain = enemy.kind === 'capo' ? 24 : enemy.kind === 'cliente' ? 14 : 10;
       this.score += enemy.kind === 'capo' ? 30 : enemy.kind === 'cliente' ? 20 : 10;
       if (Math.random() < 0.095 && this.health < 70) this.placeLoot('heal', pos.x, pos.y);
-      this.popText(pos.x, pos.y, '+' + (enemy.kind === 'capo' ? 30 : enemy.kind === 'cliente' ? 20 : 10), '#f9e88e');
+      this.popText(pos.x, pos.y, '+' + xpGain + ' XP', '#d5f6a4');
+      this.awardXP(xpGain);
     } else {
       enemy.sprite.setAlpha(0.67);
       this.time.delayedCall(65, () => { if (!enemy.dead && enemy.sprite.active) enemy.sprite.setAlpha(1); });
@@ -486,7 +615,7 @@ export class GameScene extends Phaser.Scene {
       this.popText(this.player.x, this.player.y, 'BLOCCATO!', '#85dcff');
       return;
     }
-    this.health = Math.max(0, this.health - power);
+    this.health = Math.max(0, this.health - Math.max(1, Math.round(power * Math.pow(0.88, this.armorRank))));
     this.invincibleUntil = this.elapsed + 0.75;
     this.player.setTint(0xff7798);
     const length = Math.max(0.01, Math.hypot(nx, ny));
@@ -551,18 +680,23 @@ export class GameScene extends Phaser.Scene {
   private finish(outcome: 'won' | 'lost'): void {
     this.running = false;
     this.pausedRun = false;
+    this.awaitingUpgrade = false;
+    this.offeredUpgrades = [];
     this.emitHUD();
     this.ports.onEnd({ outcome, score: this.score, kills: this.kills, seconds: this.elapsed });
   }
 
   private emitHUD(): void {
     this.ports.onHUD({
-      hp: this.health, maxHP: 100, score: this.score, kills: this.kills,
+      hp: this.health, maxHP: this.maxHP, score: this.score, kills: this.kills,
       progress: Math.min(100, Math.round(this.player ? this.player.x / FINISH_X * 100 : 0)),
       rocketLevel: this.rocketLevel, bladeLevel: this.bladeLevel, elapsed: this.elapsed,
       shieldSeconds: Math.max(0, Math.ceil(this.shieldUntil - this.elapsed)),
       speedSeconds: Math.max(0, Math.ceil(this.speedUntil - this.elapsed)),
-      rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed))
+      rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed)),
+      level: this.level, xp: this.xp, xpNeeded: this.xpNeeded(),
+      damageRank: this.damageRank, fireRateRank: this.fireRateRank,
+      movementRank: this.movementRank, armorRank: this.armorRank, maxHP: this.maxHP
     });
   }
 

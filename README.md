@@ -79,3 +79,14 @@ La libreria Giunti è visibile al traguardo; le versioni danneggiata e in fiamme
 sono risorse predisposte per la futura boss fight, non ancora una boss fight giocabile.
 
 Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o marchio.
+
+
+## Progressione v0.3 — esperienza e level-up
+
+- Percorso portato a **25.000 unità** (da 7.600), sempre verso la libreria Giunti.
+- Ogni eliminazione assegna XP automaticamente: **commesso +10, cliente +14, capo reparto +24**.
+- Al raggiungimento della soglia esperienza, il gioco si sospende e mostra **3 potenziamenti casuali e distinti** (telefono: tocca una carta; desktop: premi 1/2/3).
+- Le opzioni comprendono missili a ricerca, lame orbitanti, danno mitra, cadenza di fuoco, velocità, salute massima, riduzione danni e guarigione.
+- Le migliorie permanenti valgono per la run corrente. I pickup sulla strada restano disponibili.
+- Le soglie XP aumentano con il livello e l'XP in eccesso viene conservata.
+- La difficoltà cresce gradualmente lungo il percorso; la boss fight resta una milestone successiva.

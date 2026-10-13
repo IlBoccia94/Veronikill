@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#26182e" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="icon" type="image/svg+xml" href="/Veronikill/icon-192.png" />
+  <link rel="icon" type="image/png" href="/Veronikill/icon-192.png" />
   <link rel="apple-touch-icon" href="/Veronikill/icon-192.png" />
   <title>Veronikill — Zero resi</title>
 </head>
@@ -20,6 +20,11 @@
         <button id="pause-btn" class="square-btn" type="button" aria-label="Pausa">Ⅱ</button>
       </div>
       <div class="progress-track"><div id="progress-bar"></div><span>VERSO LA LIBRERIA ➜</span></div>
+      <div class="xp-widget" aria-label="Esperienza e livello">
+        <span class="xp-level" id="player-level">LIV. 1</span>
+        <div class="xp-meter"><div id="xp-bar"></div></div>
+        <span class="xp-number" id="xp-number">0 / 40 XP</span>
+      </div>
       <div id="loadout" class="loadout">BEST SELLER LV.1</div>
     </div>
     <div id="mobile-controls" class="hidden">
@@ -36,6 +41,15 @@
         <p class="how-to">📱 Due joystick: sinistro per muoverti, destro per mirare. Spari automaticamente.<br/>⌨️ Desktop: WASD / frecce per muoverti e mouse per mirare.</p>
         <button id="play-btn" class="primary-btn" type="button">INIZIA LA RUN ➜</button>
         <div class="subline" id="screen-subline">PROTOTIPO 0.1 · LA BOSS FIGHT ARRIVERÀ NELLA PROSSIMA VERSIONE</div>
+      </div>
+    </div>
+    <div id="levelup-screen" class="levelup-screen hidden" role="dialog" aria-modal="true" aria-labelledby="levelup-title">
+      <div class="levelup-panel">
+        <p class="levelup-eyebrow">NUOVO CAPITOLO!</p>
+        <h2 id="levelup-title">LIVELLO <span id="levelup-level">2</span></h2>
+        <p class="levelup-help">Scegli un potenziamento. Il gioco è in pausa.</p>
+        <div id="upgrade-options" class="upgrade-options"></div>
+        <p class="levelup-footer">TOCCA UNA CARTA · SU PC PREMI 1, 2 O 3</p>
       </div>
     </div>
     <div id="rotate-message"><div class="rotate-card">↻<strong>Ruota il telefono</strong><span>Veronikill si gioca in orizzontale.</span></div></div>

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameScene, type StickVector, type AimState, type HUDState, type RunResult } from './game/GameScene';
+import { GameScene, type StickVector, type AimState, type HUDState, type RunResult, type LevelUpChoice, type UpgradeOption, type UpgradeId } from './game/GameScene';
 import './styles.css';
 
 const el = <T extends HTMLElement>(id: string): T => {
@@ -21,6 +21,12 @@ const hpText = el<HTMLSpanElement>('hp-text');
 const scoreText = el<HTMLElement>('score');
 const progressBar = el<HTMLDivElement>('progress-bar');
 const loadout = el<HTMLDivElement>('loadout');
+const xpBar = el<HTMLDivElement>('xp-bar');
+const xpNumber = el<HTMLSpanElement>('xp-number');
+const levelText = el<HTMLSpanElement>('player-level');
+const levelUpPanel = el<HTMLDivElement>('levelup-screen');
+const levelUpTitle = el<HTMLSpanElement>('levelup-level');
+const upgradeOptions = el<HTMLDivElement>('upgrade-options');
 
 class TouchStick {
   private readonly region: HTMLElement;
@@ -96,10 +102,18 @@ class TouchStick {
 const moveStick = new TouchStick('stick-move', false);
 const aimStick = new TouchStick('stick-aim', true);
 const isTouch = window.matchMedia('(pointer: coarse)').matches;
-let mode: 'start' | 'playing' | 'paused' | 'result' = 'start';
+let mode: 'start' | 'playing' | 'paused' | 'result' | 'levelup' = 'start';
 let best = 0;
 try { best = Number(localStorage.getItem('veronikill-best-v1') || '0') || 0; }
 catch { /* private browsing can block localStorage */ }
+
+const upgradeImages: Partial<Record<UpgradeId, string>> = {
+  rocket: 'assets/items/missile.webp',
+  blades: 'assets/items/lame.webp',
+  heal: 'assets/items/cura.webp',
+  armor: 'assets/items/scudo.webp'
+};
+let activeLevelOptions: UpgradeOption[] = [];
 
 const scene = new GameScene({
   move: () => moveStick.vector(),
@@ -110,7 +124,13 @@ const scene = new GameScene({
     hpText.textContent = String(Math.round(data.hp));
     scoreText.textContent = String(data.score);
     progressBar.style.width = data.progress + '%';
-    const weapons = ['BEST SELLER LV.1'];
+    xpBar.style.width = (100 * Math.min(data.xp, data.xpNeeded) / Math.max(1, data.xpNeeded)).toFixed(1) + '%';
+    xpNumber.textContent = data.xp + ' / ' + data.xpNeeded + ' XP';
+    levelText.textContent = 'LIV. ' + data.level;
+    const weapons = ['MITRA LV.' + (1 + data.damageRank)];
+    if (data.fireRateRank) weapons.push('⚡ CADENZA +' + data.fireRateRank);
+    if (data.movementRank) weapons.push('👟 VELOCITÀ +' + data.movementRank);
+    if (data.armorRank) weapons.push('🛡 DIFESA +' + data.armorRank);
     if (data.rocketLevel) weapons.push('🚀 MISSILI LV.' + data.rocketLevel);
     if (data.bladeLevel) weapons.push('✂ LAME LV.' + data.bladeLevel);
     if (data.shieldSeconds) weapons.push('🛡 SCUDO ' + data.shieldSeconds + 's');
@@ -118,7 +138,45 @@ const scene = new GameScene({
     if (data.rapidSeconds) weapons.push('⚡ RAFFICA ' + data.rapidSeconds + 's');
     loadout.textContent = weapons.join('   ·   ');
   },
+  onLevelUp: ({ level, options }: LevelUpChoice) => {
+    mode = 'levelup';
+    activeLevelOptions = options;
+    levelUpTitle.textContent = String(level);
+    upgradeOptions.replaceChildren();
+    for (const option of options) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'upgrade-option';
+      const art = document.createElement('span');
+      art.className = 'upgrade-option-icon';
+      const artFile = upgradeImages[option.id];
+      if (artFile) {
+        const img = document.createElement('img');
+        img.src = import.meta.env.BASE_URL + artFile;
+        img.alt = '';
+        img.onerror = () => { art.textContent = option.icon; };
+        art.append(img);
+      } else {
+        art.textContent = option.icon;
+      }
+      const tag = document.createElement('span');
+      tag.className = 'upgrade-option-tag';
+      tag.textContent = option.rarity;
+      const name = document.createElement('strong');
+      name.className = 'upgrade-option-title';
+      name.textContent = option.title;
+      const description = document.createElement('span');
+      description.className = 'upgrade-option-desc';
+      description.textContent = option.description;
+      card.append(art, tag, name, description);
+      card.addEventListener('click', () => chooseUpgrade(option.id));
+      upgradeOptions.append(card);
+    }
+    mobileControls.classList.add('hidden');
+    levelUpPanel.classList.remove('hidden');
+  },
   onEnd: (result: RunResult) => {
+    levelUpPanel.classList.add('hidden');
     mode = 'result';
     brandedLogo.hidden = true;
     mobileControls.classList.add('hidden');
@@ -148,11 +206,23 @@ new Phaser.Game({
   scene: [scene]
 });
 
+function chooseUpgrade(id: UpgradeId): void {
+  if (mode !== 'levelup' || !scene.chooseUpgrade(id)) return;
+  if (!scene.isChoosingUpgrade) {
+    mode = 'playing';
+    activeLevelOptions = [];
+    levelUpPanel.classList.add('hidden');
+    mobileControls.classList.toggle('hidden', !isTouch);
+  }
+}
+
 const showHUD = (visible: boolean): void => {
   hud.classList.toggle('hidden', !visible);
   mobileControls.classList.toggle('hidden', !visible || !isTouch);
 };
 playBtn.addEventListener('click', () => {
+  levelUpPanel.classList.add('hidden');
+  activeLevelOptions = [];
   if (mode === 'paused') {
     scene.setPaused(false);
   } else {
@@ -178,6 +248,12 @@ const pauseRun = (): void => {
 };
 pauseBtn.addEventListener('click', pauseRun);
 window.addEventListener('keydown', (event) => {
+  if (mode === 'levelup' && ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].includes(event.code)) {
+    const choiceIndex = Number(event.code.at(-1)) - 1;
+    const option = activeLevelOptions[choiceIndex];
+    if (option) chooseUpgrade(option.id);
+    return;
+  }
   if (event.code !== 'Escape' && event.code !== 'Space') return;
   if (event.code === 'Space') event.preventDefault();
   if (mode === 'playing') pauseRun();
