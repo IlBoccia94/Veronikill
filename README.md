@@ -47,7 +47,7 @@ La PWA usa un service worker per conservare la shell e gli asset statici dopo il
 - `src/main.ts`: bootstrap Phaser, componenti UI e controlli.
 - `src/game/GameScene.ts`: simulazione di gioco, gestione nemici/armi e mondo.
 - `src/styles.css`: UI responsiva e joystick.
-- `public/icon.svg`: icona provvisoria; il set PNG maskable definitivo verrà prodotto insieme agli asset.
+- `public/icon.svg`: icona vettoriale provvisoria; lo script `scripts/make-icons.mjs` genera PNG 192/512 maskable senza dipendenze prima di dev/build.
 - `vite.config.ts`: PWA, cache offline e base path di GitHub Pages.
 
 Il marchio CartaMarcia è inventato. La violenza è esclusivamente slapstick/cartoon senza gore.
