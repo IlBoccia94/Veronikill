@@ -55,8 +55,8 @@ type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
 const WIDTH = 960;
 const HEIGHT = 900;
 const FINISH_X = 25000;
-const ROAD_TOP = 120;
-const ROAD_BOTTOM = 780;
+const ROAD_TOP = 165;
+const ROAD_BOTTOM = 735;
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
@@ -706,7 +706,7 @@ export class GameScene extends Phaser.Scene {
     if (this.textures.exists('street-art')) {
       const street = this.add.tileSprite(0, 0, totalWidth, HEIGHT, 'street-art')
         .setOrigin(0, 0).setDepth(0);
-      // V4 artwork is a mirrored, horizontally seamless street image.
+      // The new modular-art roadway repeats seamlessly along the extended route.
       // Keep the pavement/curb proportions consistent when adapting its height.
       const sourceHeight = this.textures.get('street-art').source[0].height;
       const tileScale = HEIGHT / sourceHeight;
@@ -719,8 +719,8 @@ export class GameScene extends Phaser.Scene {
       for (let x = 30; x < totalWidth; x += 120) g.fillRect(x, HEIGHT / 2 - 3, 62, 6);
     }
 
-    // The blue Giunti bookstore is a real transparent sprite cropped from the
-    // approved art sheet. Alternate damaged/burning textures are preloaded for
+    // The blue Giunti bookstore is rendered using the latest transparent sprite
+    // separated from the updated art sheet. Alternate damaged/burning textures are preloaded for
     // future encounter phases, without changing the current victory logic.
     const storeX = FINISH_X + 150;
     const storeY = HEIGHT / 2;

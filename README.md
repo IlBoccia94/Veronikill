@@ -103,3 +103,13 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - The original updated graphics atlas is retained at `public/assets/bookstore/giunti-atlas-v2.webp`.
 - The game preserves the 25,000-unit extended route and vertical camera movement; only background/store graphics changed in this update.
 - The alternate store states are loaded and ready for future encounter sequences; the game currently displays the intact storefront at the finish line.
+
+
+## Graphics refresh — modular street & Giunti illustrated atlas
+
+- A new clean 2000 × 900 scrolling street, assembled from the latest modular road sheet, replaces the prior road graphic in `public/assets/street/street-segment.webp`.
+- The full modular source sheet is saved at `public/assets/street/street-tileset.webp`.
+- The new blue-and-white Giunti art is split into three transparent, individually usable in-game sprites: `giunti.webp`, `giunti-damaged.webp`, and `giunti-fire.webp` inside `public/assets/bookstore/`.
+- Its complete reference atlas is saved as `public/assets/bookstore/giunti-atlas.webp`.
+- The playable zone is aligned to the road asphalt boundaries while maintaining the vertical-follow camera and XP system.
+- The current destination shows the intact storefront; damaged/fire sprites are loaded for the upcoming final encounter.
