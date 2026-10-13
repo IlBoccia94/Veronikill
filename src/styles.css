@@ -56,3 +56,9 @@ h1 { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: clamp(42px,
   .stick-knob { width: 34px; height: 34px; }
   .panel { max-width: 550px; } .subline { margin-top: 9px; }
 }
+
+/* Optional official illustration assets. Text and gameplay still render if the art has not shipped yet. */
+.custom-logo { display: block; max-width: min(400px, 65vw); max-height: 120px; margin: 4px auto 8px; object-fit: contain; }
+.custom-logo:not([hidden]) + #screen-title { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.veronica-cover { display: block; max-height: min(25vh, 155px); max-width: min(27vw, 190px); object-fit: contain; margin: 0 auto 10px; filter: drop-shadow(0 4px 10px #0006); }
+.custom-logo[hidden], .veronica-cover[hidden] { display: none; }
