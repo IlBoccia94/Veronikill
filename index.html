@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#26182e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="/Veronikill/icon.svg" />
+  <link rel="apple-touch-icon" href="/Veronikill/icon.svg" />
+  <title>Veronikill — Zero resi</title>
+</head>
+<body>
+  <div id="app">
+    <div id="game" aria-label="Area di gioco Veronikill"></div>
+    <div id="hud" class="hidden" aria-live="off">
+      <div class="hud-top">
+        <div class="hp-group"><span class="hp-label">VERONICA</span><div class="hp-track"><div id="hp-bar"></div></div><span id="hp-text">100</span></div>
+        <div class="hud-score"><span>KO</span><b id="score">0</b></div>
+        <button id="pause-btn" class="square-btn" type="button" aria-label="Pausa">Ⅱ</button>
+      </div>
+      <div class="progress-track"><div id="progress-bar"></div><span>VERSO LA LIBRERIA ➜</span></div>
+      <div id="loadout" class="loadout">BEST SELLER LV.1</div>
+    </div>
+    <div id="mobile-controls" class="hidden">
+      <div id="stick-move" class="stick-zone" aria-label="Joystick movimento"><div class="stick-ring"><div class="stick-knob"></div></div><span>MUOVI</span></div>
+      <div id="stick-aim" class="stick-zone" aria-label="Joystick mira"><div class="stick-ring"><div class="stick-knob"></div></div><span>MIRA · AUTO-FIRE</span></div>
+    </div>
+    <div id="screen" class="screen">
+      <div class="panel" id="screen-panel">
+        <p class="eyebrow">UN SOLO OBIETTIVO · ZERO RESI</p>
+        <h1 id="screen-title">VERONIKILL</h1>
+        <p id="screen-copy">Veronica ha un conto aperto con una libreria molto, molto antipatica. Attraversa la città, schiva i nemici e trova nuovi giocattoli.</p>
+        <p class="how-to">📱 Due joystick: sinistro per muoverti, destro per mirare. Spari automaticamente.<br/>⌨️ Desktop: WASD / frecce per muoverti e mouse per mirare.</p>
+        <button id="play-btn" class="primary-btn" type="button">INIZIA LA RUN ➜</button>
+        <div class="subline" id="screen-subline">PROTOTIPO 0.1 · LA BOSS FIGHT ARRIVERÀ NELLA PROSSIMA VERSIONE</div>
+      </div>
+    </div>
+    <div id="rotate-message"><div class="rotate-card">↻<strong>Ruota il telefono</strong><span>Veronikill si gioca in orizzontale.</span></div></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
