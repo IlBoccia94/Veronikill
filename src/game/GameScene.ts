@@ -202,6 +202,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
     this.playerShadow.setPosition(170, 470);
+    this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
     this.cameras.main.centerOn(370, HEIGHT / 2);
     this.running = true;
     this.pausedRun = false;
@@ -705,6 +706,9 @@ export class GameScene extends Phaser.Scene {
       this.bookstore.setTexture('bookstore-giunti-damaged')
         .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight);
     }
+    // Let the camera reveal the bookstore while its three states play.
+    this.cameras.main.stopFollow();
+    this.cameras.main.pan(FINISH_X + 75, HEIGHT / 2, 850, 'Sine.easeInOut');
     this.cameras.main.shake(430, 0.004);
     this.emitHUD();
   }
