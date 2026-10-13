@@ -1,7 +1,7 @@
 // Generate real PNG PWA icons without native binaries or third-party build tools.
 // Uses only Node.js (zlib). Source geometry is intentionally simple and maskable-safe.
 import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 
 const DIR = new URL('../public/', import.meta.url);
 const colors = {
@@ -78,6 +78,8 @@ function png(size) {
 }
 mkdirSync(DIR,{recursive:true});
 for(const size of [192,512]) {
-  writeFileSync(new URL('icon-'+size+'.png',DIR),png(size));
+  const target = new URL('icon-'+size+'.png',DIR);
+  // Never overwrite custom graphics committed to the repo.
+  if (!existsSync(target)) writeFileSync(target,png(size));
 }
 console.log('Generated PWA icons 192px and 512px.');
