@@ -4,9 +4,9 @@ Shooter arcade top-down progettato per telefono (landscape) e browser desktop. P
 
 ## Stato
 
-**Prototipo giocabile v0.1**: strada urbana generata a segmenti, movimento e mira indipendenti, fuoco automatico, tre archetipi di nemici, proiettili ostili, missile a ricerca, lame orbitanti, pickup, HUD, progressione fino alla libreria, sconfitta/vittoria e retry.
+**Versione corrente v0.5**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta di tre potenziamenti al level-up. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
 
-**Non ancora incluso**: boss Proprietario, incendio cartoon, boomerang, audio, asset grafici definitivi, salvataggi/high score, bilanciamento. Questi sono milestone successive, non funzionalità già realizzate.
+**Da aggiungere**: sprite illustrato specifico del Direttore (attualmente usa lo sprite del Capo reparto, ingrandito e con aura), boomerang, effetti sonori e musica, playtesting/bilanciamento approfondito.
 
 ## Avviare in locale
 
@@ -113,3 +113,13 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - Its complete reference atlas is saved as `public/assets/bookstore/giunti-atlas.webp`.
 - The playable zone is aligned to the road asphalt boundaries while maintaining the vertical-follow camera and XP system.
 - The current destination shows the intact storefront; damaged/fire sprites are loaded for the upcoming final encounter.
+
+## Boss fight v0.5 — Direttore Generale
+
+- La battaglia parte quando Veronica raggiunge gli ultimi **560 px** di avanzamento; non esiste più una vittoria automatica attraversando la linea di arrivo.
+- Il Direttore usa una barra vita dedicata e ha tre pattern: **raffiche a ventaglio**, **ondate circolari** e **carica annunciata da una linea rossa**.
+- Sotto il 45% della salute accelera gli attacchi ed entra in modalità furiosa. La vita massima scala leggermente con il livello della giocatrice.
+- Il boss è bersaglio dei proiettili, dei missili a ricerca e delle lame orbitanti. Gli altri nemici vengono rimossi dall'arena per mantenere la visuale leggibile su telefono.
+- Dopo la sconfitta: sprite della libreria **`giunti-damaged-v04.webp`** per 1,55 secondi, poi **`giunti-fire-v04.webp`** con fiamme cartoon per 3,2 secondi; infine compare la schermata di vittoria.
+- La telecamera inquadra la libreria durante il finale; **Riprova** ripristina l'edificio e il normale inseguimento della protagonista.
+- Per vedere le modifiche pubblicate, attendere il completamento della GitHub Action **Deploy Veronikill PWA** e, se necessario, ricaricare la PWA per aggiornare la cache.
