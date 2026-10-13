@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'logo.webp', 'veronica-hero.webp', 'veronica-topdown.webp'],
       manifest: {
         id: '/Veronikill/',
         name: 'Veronikill — Zero resi',
@@ -20,12 +20,11 @@ export default defineConfig({
         scope: '/Veronikill/',
         icons: [
           { src: '/Veronikill/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/Veronikill/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-          { src: '/Veronikill/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }
+          { src: '/Veronikill/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,webmanifest}'],
         navigateFallback: '/Veronikill/index.html',
         cleanupOutdatedCaches: true
       }

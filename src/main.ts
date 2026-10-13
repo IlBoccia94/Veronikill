@@ -11,6 +11,7 @@ const panel = el<HTMLDivElement>('screen');
 const title = el<HTMLHeadingElement>('screen-title');
 const copy = el<HTMLParagraphElement>('screen-copy');
 const subline = el<HTMLDivElement>('screen-subline');
+const brandedLogo = el<HTMLImageElement>('custom-logo');
 const playBtn = el<HTMLButtonElement>('play-btn');
 const pauseBtn = el<HTMLButtonElement>('pause-btn');
 const hud = el<HTMLDivElement>('hud');
@@ -116,6 +117,7 @@ const scene = new GameScene({
   },
   onEnd: (result: RunResult) => {
     mode = 'result';
+    brandedLogo.hidden = true;
     mobileControls.classList.add('hidden');
     if (result.score > best) {
       best = result.score;
@@ -162,6 +164,7 @@ playBtn.addEventListener('click', () => {
 const pauseRun = (): void => {
   if (mode !== 'playing' || !scene.isRunning) return;
   mode = 'paused';
+  brandedLogo.hidden = true;
   scene.setPaused(true);
   title.textContent = 'PAUSA CAFFÈ';
   copy.textContent = 'Anche le rivoluzioni editoriali hanno bisogno di una pausa.';

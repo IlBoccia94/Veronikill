@@ -62,3 +62,9 @@ h1 { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: clamp(42px,
 .custom-logo:not([hidden]) + #screen-title { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .veronica-cover { display: block; max-height: min(25vh, 155px); max-width: min(27vw, 190px); object-fit: contain; margin: 0 auto 10px; filter: drop-shadow(0 4px 10px #0006); }
 .custom-logo[hidden], .veronica-cover[hidden] { display: none; }
+
+/* The approved app logo and Veronica illustration replace the provisional cover art. */
+@media (max-height: 420px) {
+ .custom-logo { max-height: 18vh; max-width: 30vw; }
+ .veronica-cover { max-height: 15vh; max-width: 18vw; }
+}

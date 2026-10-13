@@ -52,6 +52,15 @@ La PWA usa un service worker per conservare la shell e gli asset statici dopo il
 
 Il marchio CartaMarcia è inventato. La violenza è esclusivamente slapstick/cartoon senza gore.
 
-## Artwork ufficiale
+## Artwork ufficiale integrato (ottobre 2026)
 
-La schermata iniziale è pronta a utilizzare `public/logo.png` e `public/veronica-hero.png`. Se le immagini non sono presenti, mostra i titoli e l'UI esistenti senza errori bloccanti. Il generatore PWA in `scripts/make-icons.mjs` ora mantiene eventuali PNG personalizzati `public/icon-192.png` e `public/icon-512.png` senza sovrascriverli durante la build. Finché questi asset non sono caricati nel repository, il gioco continuerà a mostrare le grafiche provvisorie.
+Gli asset grafici approvati sono ora caricati nel repository, nella cartella `public/`:
+
+- `icon-192.png` e `icon-512.png`: nuove icone PWA installabili (logo Veronikill)
+- `logo.webp`: logo e artwork della schermata iniziale
+- `veronica-hero.webp`: illustrazione di Veronica per il menu
+- `veronica-topdown.webp`: sprite di Veronica in partita
+
+Lo sprite viene caricato da Phaser durante `preload()` e sostituisce la sagoma provvisoria; il fallback grafico è mantenuto solo se un caricamento fallisce. La build conserva i PNG ufficiali senza sovrascriverli e include WebP nella cache offline PWA. La risoluzione degli asset è stata ottimizzata per la distribuzione mobile senza modificare le illustrazioni scelte.
+
+**Nota**: le pose in movimento non costituiscono ancora un'animazione frame-by-frame. Per la prossima milestone prevedere sprite sheet animata dedicata.

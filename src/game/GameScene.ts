@@ -46,6 +46,8 @@ function randomBetween(min: number, max: number): number {
 export class GameScene extends Phaser.Scene {
   private readonly ports: GamePorts;
   private player!: Phaser.GameObjects.Image;
+  private playerScale = 0.97;
+  private playerRotationOffset = 0;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private enemies: Enemy[] = [];
   private shots: Shot[] = [];
@@ -76,11 +78,21 @@ export class GameScene extends Phaser.Scene {
     this.ports = ports;
   }
 
+  preload(): void {
+    // Hand-painted Veronica artwork, generated from the approved character design.
+    this.load.image('veronica-art', '/Veronikill/veronica-topdown.webp');
+  }
+
   create(): void {
     this.makeTextures();
     this.drawCity();
     this.playerShadow = this.add.ellipse(170, 280, 43, 17, 0x0c0d16, 0.36).setDepth(10);
-    this.player = this.add.image(170, 270, 'veronica').setDepth(22).setScale(0.97);
+    const artTexture = this.textures.exists('veronica-art') ? 'veronica-art' : 'veronica';
+    this.player = this.add.image(170, 270, artTexture).setDepth(22);
+    this.playerScale = artTexture === 'veronica-art' ? 86 / this.player.height : 0.97;
+    // The illustration's weapon points down-right; compensate when rotating to aim.
+    this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
+    this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
     this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
     this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
     this.cameras.main.roundPixels = true;
@@ -106,7 +118,7 @@ export class GameScene extends Phaser.Scene {
     this.bladeLevel = 0;
     this.bladeAngle = 0;
     this.winTriggered = false;
-    this.player.setPosition(170, 270).setRotation(0).clearTint();
+    this.player.setPosition(170, 270).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
     this.playerShadow.setPosition(170, 287);
     this.cameras.main.centerOn(370, HEIGHT / 2);
     this.running = true;
@@ -164,7 +176,7 @@ export class GameScene extends Phaser.Scene {
     this.player.x = Phaser.Math.Clamp(this.player.x + move.x * speed * dt, 90, FINISH_X);
     this.player.y = Phaser.Math.Clamp(this.player.y + move.y * speed * dt, ROAD_TOP + 34, ROAD_BOTTOM - 34);
     this.playerShadow.setPosition(this.player.x + 1, this.player.y + 20);
-    this.player.setScale(0.97 + (magnitude > 0.07 ? Math.sin(this.elapsed * 17) * 0.028 : 0));
+    this.player.setScale(this.playerScale * (1 + (magnitude > 0.07 ? Math.sin(this.elapsed * 17) * 0.022 : 0)));
 
     const stickAim = this.ports.aim();
     if (stickAim.active) {
@@ -176,7 +188,7 @@ export class GameScene extends Phaser.Scene {
         this.aimAngle = Math.atan2(world.y - this.player.y, world.x - this.player.x);
       }
     }
-    this.player.rotation = this.aimAngle;
+    this.player.rotation = this.aimAngle + this.playerRotationOffset;
     if (this.elapsed < this.invincibleUntil) {
       this.player.setAlpha(Math.floor(this.elapsed * 20) % 2 ? 0.40 : 1);
     } else {
