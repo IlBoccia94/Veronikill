@@ -317,7 +317,6 @@ export class GameScene extends Phaser.Scene {
     this.updatePlayer(dt);
     if (this.bossPhase === 'travel' && this.player.x >= FINISH_X - 560) this.startBossFight();
     this.updateWeapons(dt);
-    if (this.bossPhase === 'damaged') return; // Blades can defeat the boss immediately.
     if (this.bossPhase === 'travel') this.updateEnemies(dt);
     if (this.bossPhase === 'combat') this.updateBoss(dt);
     this.updateShots(dt);
