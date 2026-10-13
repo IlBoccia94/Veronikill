@@ -1,0 +1,187 @@
+import Phaser from 'phaser';
+import { GameScene, type StickVector, type AimState, type HUDState, type RunResult } from './game/GameScene';
+import './styles.css';
+
+const el = <T extends HTMLElement>(id: string): T => {
+  const item = document.getElementById(id);
+  if (!item) throw new Error('Elemento UI mancante: ' + id);
+  return item as T;
+};
+const panel = el<HTMLDivElement>('screen');
+const title = el<HTMLHeadingElement>('screen-title');
+const copy = el<HTMLParagraphElement>('screen-copy');
+const subline = el<HTMLDivElement>('screen-subline');
+const playBtn = el<HTMLButtonElement>('play-btn');
+const pauseBtn = el<HTMLButtonElement>('pause-btn');
+const hud = el<HTMLDivElement>('hud');
+const mobileControls = el<HTMLDivElement>('mobile-controls');
+const hpBar = el<HTMLDivElement>('hp-bar');
+const hpText = el<HTMLSpanElement>('hp-text');
+const scoreText = el<HTMLElement>('score');
+const progressBar = el<HTMLDivElement>('progress-bar');
+const loadout = el<HTMLDivElement>('loadout');
+
+class TouchStick {
+  private readonly region: HTMLElement;
+  private readonly ring: HTMLElement;
+  private readonly knob: HTMLElement;
+  private pointerId: number | null = null;
+  private dx = 0;
+  private dy = 0;
+  private rememberedAngle = 0;
+  private hasAimed = false;
+
+  constructor(id: string, private readonly isAim: boolean) {
+    this.region = el(id);
+    this.ring = this.region.querySelector('.stick-ring') as HTMLElement;
+    this.knob = this.region.querySelector('.stick-knob') as HTMLElement;
+    this.region.addEventListener('pointerdown', (event) => {
+      if (this.pointerId !== null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.pointerId = event.pointerId;
+      this.region.setPointerCapture(event.pointerId);
+      this.readPointer(event);
+      this.region.classList.add('engaged');
+    }, { passive: false });
+    this.region.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== this.pointerId) return;
+      event.preventDefault();
+      this.readPointer(event);
+    }, { passive: false });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      this.region.addEventListener(type, (event: Event) => {
+        const point = event as PointerEvent;
+        if (point.pointerId !== this.pointerId) return;
+        this.pointerId = null;
+        this.dx = 0;
+        this.dy = 0;
+        this.knob.style.transform = 'translate(-50%, -50%)';
+        this.region.classList.remove('engaged');
+      });
+    }
+  }
+
+  private readPointer(event: PointerEvent): void {
+    const rect = this.ring.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const radius = Math.max(22, rect.width / 2 - 23);
+    const rawX = (event.clientX - centerX) / radius;
+    const rawY = (event.clientY - centerY) / radius;
+    const magnitude = Math.max(1, Math.hypot(rawX, rawY));
+    const x = rawX / magnitude;
+    const y = rawY / magnitude;
+    // Analog dead zone; preserves sensitivity near the middle.
+    this.dx = Math.abs(x) > 0.10 ? x : 0;
+    this.dy = Math.abs(y) > 0.10 ? y : 0;
+    this.knob.style.transform = `translate(calc(-50% + ${x * radius}px), calc(-50% + ${y * radius}px))`;
+    if (this.isAim && Math.hypot(x, y) > 0.18) {
+      this.rememberedAngle = Math.atan2(y, x);
+      this.hasAimed = true;
+    }
+  }
+
+  vector(): StickVector { return { x: this.dx, y: this.dy }; }
+  aim(): AimState { return { active: this.hasAimed, angle: this.rememberedAngle }; }
+  reset(): void {
+    this.dx = this.dy = 0;
+    this.hasAimed = false;
+    this.rememberedAngle = 0;
+    this.knob.style.transform = 'translate(-50%, -50%)';
+  }
+}
+
+const moveStick = new TouchStick('stick-move', false);
+const aimStick = new TouchStick('stick-aim', true);
+const isTouch = window.matchMedia('(pointer: coarse)').matches;
+let mode: 'start' | 'playing' | 'paused' | 'result' = 'start';
+let best = 0;
+try { best = Number(localStorage.getItem('veronikill-best-v1') || '0') || 0; }
+catch { /* private browsing can block localStorage */ }
+
+const scene = new GameScene({
+  move: () => moveStick.vector(),
+  aim: () => isTouch ? aimStick.aim() : { active: false, angle: 0 },
+  onHUD: (data: HUDState) => {
+    hpBar.style.width = Math.max(0, data.hp / data.maxHP * 100) + '%';
+    hpBar.classList.toggle('low', data.hp < 30);
+    hpText.textContent = String(Math.round(data.hp));
+    scoreText.textContent = String(data.score);
+    progressBar.style.width = data.progress + '%';
+    const weapons = ['BEST SELLER LV.1'];
+    if (data.rocketLevel) weapons.push('🚀 MISSILI LV.' + data.rocketLevel);
+    if (data.bladeLevel) weapons.push('✂ LAME LV.' + data.bladeLevel);
+    loadout.textContent = weapons.join('   ·   ');
+  },
+  onEnd: (result: RunResult) => {
+    mode = 'result';
+    mobileControls.classList.add('hidden');
+    if (result.score > best) {
+      best = result.score;
+      try { localStorage.setItem('veronikill-best-v1', String(best)); } catch { /* optional */ }
+    }
+    title.textContent = result.outcome === 'won' ? 'CARTAMARCIA: RAGGIUNTA!' : 'FUORI CATALOGO!';
+    copy.textContent = result.outcome === 'won'
+      ? 'Veronica è arrivata alla libreria. Il proprietario si sta già preparando... La boss fight arriverà nel prossimo aggiornamento.'
+      : 'I commessi hanno avuto la meglio, per questa volta. C’è sempre una seconda edizione.';
+    subline.textContent = `KO: ${result.kills}  ·  PUNTI: ${result.score}  ·  RECORD: ${best}  ·  TEMPO: ${Math.round(result.seconds)}s`;
+    playBtn.textContent = 'GIOCA ANCORA ➜';
+    panel.classList.remove('hidden');
+  }
+});
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: 'game',
+  width: 960,
+  height: 540,
+  backgroundColor: '#243044',
+  antialias: true,
+  render: { pixelArt: false },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scene: [scene]
+});
+
+const showHUD = (visible: boolean): void => {
+  hud.classList.toggle('hidden', !visible);
+  mobileControls.classList.toggle('hidden', !visible || !isTouch);
+};
+playBtn.addEventListener('click', () => {
+  if (mode === 'paused') {
+    scene.setPaused(false);
+  } else {
+    moveStick.reset();
+    aimStick.reset();
+    scene.startRun();
+  }
+  mode = 'playing';
+  panel.classList.add('hidden');
+  showHUD(true);
+});
+const pauseRun = (): void => {
+  if (mode !== 'playing' || !scene.isRunning) return;
+  mode = 'paused';
+  scene.setPaused(true);
+  title.textContent = 'PAUSA CAFFÈ';
+  copy.textContent = 'Anche le rivoluzioni editoriali hanno bisogno di una pausa.';
+  subline.textContent = 'Due joystick, sparo automatico. Il gioco riprenderà esattamente da qui.';
+  playBtn.textContent = 'RIPRENDI ➜';
+  panel.classList.remove('hidden');
+  showHUD(false);
+};
+pauseBtn.addEventListener('click', pauseRun);
+window.addEventListener('keydown', (event) => {
+  if (event.code !== 'Escape' && event.code !== 'Space') return;
+  if (event.code === 'Space') event.preventDefault();
+  if (mode === 'playing') pauseRun();
+  else if (mode === 'paused') playBtn.click();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseRun();
+});
+window.addEventListener('blur', () => {
+  if (isTouch) pauseRun();
+});
+el('game').addEventListener('contextmenu', event => event.preventDefault());
+showHUD(false);
