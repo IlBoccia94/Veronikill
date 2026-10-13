@@ -5,6 +5,7 @@ export type AimState = { active: boolean; angle: number };
 export type HUDState = {
   hp: number; maxHP: number; score: number; kills: number; progress: number;
   rocketLevel: number; bladeLevel: number; elapsed: number;
+  shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
 };
 export type RunResult = { outcome: 'won' | 'lost'; score: number; kills: number; seconds: number };
 
@@ -27,14 +28,14 @@ type Shot = {
   sprite: Phaser.GameObjects.Image; vx: number; vy: number; ttl: number;
   power: number; owner: 'player' | 'enemy'; rocket: boolean; dead: boolean;
 };
-type LootKind = 'rocket' | 'blades' | 'heal';
+type LootKind = 'rocket' | 'blades' | 'heal' | 'shield' | 'coffee' | 'ammo';
 type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
 
 const WIDTH = 960;
-const HEIGHT = 540;
+const HEIGHT = 900;
 const FINISH_X = 7600;
-const ROAD_TOP = 118;
-const ROAD_BOTTOM = 422;
+const ROAD_TOP = 120;
+const ROAD_BOTTOM = 780;
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
@@ -71,6 +72,9 @@ export class GameScene extends Phaser.Scene {
   private rocketLevel = 0;
   private bladeLevel = 0;
   private bladeAngle = 0;
+  private shieldUntil = 0;
+  private speedUntil = 0;
+  private rapidUntil = 0;
   private winTriggered = false;
 
   constructor(ports: GamePorts) {
@@ -79,16 +83,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Hand-painted Veronica artwork, generated from the approved character design.
-    this.load.image('veronica-art', '/Veronikill/veronica-topdown.webp');
+    const base = import.meta.env.BASE_URL;
+    this.load.image('veronica-art', base + 'veronica-topdown.webp');
+    this.load.image('street-art', base + 'assets/street/street-segment.webp');
+    for (const kind of ['commesso', 'capo', 'cliente']) {
+      this.load.image('enemy-' + kind, base + 'assets/enemies/' + kind + '.webp');
+    }
+    for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
+      this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
+    }
+    for (const kind of ['giunti', 'giunti-damaged', 'giunti-fire']) {
+      this.load.image('bookstore-' + kind, base + 'assets/bookstore/' + kind + '.webp');
+    }
   }
 
   create(): void {
     this.makeTextures();
     this.drawCity();
-    this.playerShadow = this.add.ellipse(170, 280, 43, 17, 0x0c0d16, 0.36).setDepth(10);
+    this.playerShadow = this.add.ellipse(170, 470, 43, 17, 0x0c0d16, 0.36).setDepth(10);
     const artTexture = this.textures.exists('veronica-art') ? 'veronica-art' : 'veronica';
-    this.player = this.add.image(170, 270, artTexture).setDepth(22);
+    this.player = this.add.image(170, 450, artTexture).setDepth(22);
     this.playerScale = artTexture === 'veronica-art' ? 86 / this.player.height : 0.97;
     // The illustration's weapon points down-right; compensate when rotating to aim.
     this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
@@ -117,9 +131,12 @@ export class GameScene extends Phaser.Scene {
     this.rocketLevel = 0;
     this.bladeLevel = 0;
     this.bladeAngle = 0;
+    this.shieldUntil = 0;
+    this.speedUntil = 0;
+    this.rapidUntil = 0;
     this.winTriggered = false;
-    this.player.setPosition(170, 270).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
-    this.playerShadow.setPosition(170, 287);
+    this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
+    this.playerShadow.setPosition(170, 470);
     this.cameras.main.centerOn(370, HEIGHT / 2);
     this.running = true;
     this.pausedRun = false;
@@ -172,7 +189,7 @@ export class GameScene extends Phaser.Scene {
     if (magnitude > 1) {
       move.x /= magnitude; move.y /= magnitude;
     }
-    const speed = 255;
+    const speed = this.elapsed < this.speedUntil ? 340 : 255;
     this.player.x = Phaser.Math.Clamp(this.player.x + move.x * speed * dt, 90, FINISH_X);
     this.player.y = Phaser.Math.Clamp(this.player.y + move.y * speed * dt, ROAD_TOP + 34, ROAD_BOTTOM - 34);
     this.playerShadow.setPosition(this.player.x + 1, this.player.y + 20);
@@ -199,7 +216,7 @@ export class GameScene extends Phaser.Scene {
   private updateWeapons(dt: number): void {
     this.fireTimer -= dt;
     if (this.fireTimer <= 0 && this.shots.length < 140) {
-      this.fireTimer = 0.165;
+      this.fireTimer = this.elapsed < this.rapidUntil ? 0.085 : 0.165;
       const angle = this.aimAngle + randomBetween(-3, 3) * Math.PI / 180;
       const muzzle = 35;
       this.addShot(
@@ -292,7 +309,12 @@ export class GameScene extends Phaser.Scene {
       }
 
       s.y = Phaser.Math.Clamp(s.y, ROAD_TOP + 10, ROAD_BOTTOM - 10);
-      s.rotation = Math.atan2(dy, dx);
+      // Top-down illustrated enemies stay upright rather than spinning sideways.
+      if (s.texture.key.startsWith('enemy-')) {
+        s.setFlipX(dx < 0);
+      } else {
+        s.rotation = Math.atan2(dy, dx);
+      }
 
       if (dist < (enemy.kind === 'capo' ? 44 : 34)) {
         this.hurtPlayer(enemy.damage, dx, dy);
@@ -304,8 +326,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.player.x >= this.nextLootX) {
-      const type: LootKind = this.lootIndex === 0 ? 'rocket' : this.lootIndex === 1 ? 'blades' : this.lootIndex % 4 === 3 ? 'heal' : this.lootIndex % 2 === 0 ? 'rocket' : 'blades';
-      this.placeLoot(type, this.player.x + 290, randomBetween(185, 355));
+      const pool: LootKind[] = ['rocket', 'blades', 'heal', 'shield', 'rocket', 'coffee', 'blades', 'ammo'];
+      const type = pool[this.lootIndex % pool.length];
+      this.placeLoot(type, this.player.x + 290, randomBetween(ROAD_TOP + 90, ROAD_BOTTOM - 90));
       this.lootIndex++;
       this.nextLootX += 1100;
     }
@@ -355,7 +378,7 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
-      if (!shot.dead && (shot.sprite.y < 80 || shot.sprite.y > 470 || Math.abs(shot.sprite.x - this.player.x) > 1100)) {
+      if (!shot.dead && (shot.sprite.y < ROAD_TOP - 80 || shot.sprite.y > ROAD_BOTTOM + 80 || Math.abs(shot.sprite.x - this.player.x) > 1100)) {
         shot.dead = true; shot.sprite.destroy();
       }
     }
@@ -373,9 +396,18 @@ export class GameScene extends Phaser.Scene {
           this.bladeLevel = Math.min(3, this.bladeLevel + 1);
           this.rebuildBlades();
           this.popText(pick.sprite.x, pick.sprite.y, 'LAME LV.' + this.bladeLevel, '#f9a8ff');
-        } else {
+        } else if (pick.kind === 'heal') {
           this.health = Math.min(100, this.health + 30);
           this.popText(pick.sprite.x, pick.sprite.y, '+30 HP', '#6affcf');
+        } else if (pick.kind === 'shield') {
+          this.shieldUntil = Math.max(this.shieldUntil, this.elapsed) + 8;
+          this.popText(pick.sprite.x, pick.sprite.y, 'SCUDO 8s', '#97e8ff');
+        } else if (pick.kind === 'coffee') {
+          this.speedUntil = Math.max(this.speedUntil, this.elapsed) + 8;
+          this.popText(pick.sprite.x, pick.sprite.y, 'CAFFE TURBO 8s', '#ffe283');
+        } else if (pick.kind === 'ammo') {
+          this.rapidUntil = Math.max(this.rapidUntil, this.elapsed) + 8;
+          this.popText(pick.sprite.x, pick.sprite.y, 'RAFFICA 8s', '#ffd37f');
         }
         pick.sprite.destroy();
         this.emitHUD();
@@ -404,7 +436,12 @@ export class GameScene extends Phaser.Scene {
       capo: { hp: 132, speed: 72, damage: 17, texture: 'capo' },
       cliente: { hp: 57, speed: 91, damage: 11, texture: 'cliente' }
     }[kind];
-    const sprite = this.add.image(x, y, spec.texture).setDepth(18);
+    const texture = this.textures.exists('enemy-' + kind) ? 'enemy-' + kind : spec.texture;
+    const sprite = this.add.image(x, y, texture).setDepth(18);
+    if (texture !== spec.texture) {
+      const width = kind === 'capo' ? 84 : 70;
+      sprite.setScale(width / sprite.width);
+    }
     this.enemies.push({
       sprite, kind, hp: spec.hp, speed: spec.speed, damage: spec.damage, phase: Math.random() * Math.PI * 2,
       cooldown: kind === 'cliente' ? 1.5 : 3.3, warning: 0, charge: 0, lastBlade: -5, dead: false
@@ -444,6 +481,11 @@ export class GameScene extends Phaser.Scene {
 
   private hurtPlayer(power: number, nx: number, ny: number): void {
     if (this.elapsed < this.invincibleUntil || !this.running) return;
+    if (this.elapsed < this.shieldUntil) {
+      this.invincibleUntil = this.elapsed + 0.45;
+      this.popText(this.player.x, this.player.y, 'BLOCCATO!', '#85dcff');
+      return;
+    }
     this.health = Math.max(0, this.health - power);
     this.invincibleUntil = this.elapsed + 0.75;
     this.player.setTint(0xff7798);
@@ -459,13 +501,23 @@ export class GameScene extends Phaser.Scene {
     for (const blade of this.blades) blade.destroy();
     this.blades = [];
     for (let i = 0; i < 1 + this.bladeLevel; i++) {
-      this.blades.push(this.add.image(this.player.x, this.player.y, 'blade').setDepth(21));
+      const texture = this.textures.exists('item-lame') ? 'item-lame' : 'blade';
+      const blade = this.add.image(this.player.x, this.player.y, texture).setDepth(21);
+      if (texture !== 'blade') blade.setScale(37 / Math.max(blade.width, blade.height));
+      this.blades.push(blade);
     }
   }
 
   private placeLoot(kind: LootKind, x: number, y: number): void {
-    const sprite = this.add.image(x, y, kind === 'rocket' ? 'loot-rocket' : kind === 'blades' ? 'loot-blades' : 'loot-heal')
-      .setDepth(12);
+    const imageKeys: Record<LootKind, string> = {
+      rocket: 'item-missile', blades: 'item-lame', heal: 'item-cura',
+      shield: 'item-scudo', coffee: 'item-caffe', ammo: 'item-munizioni'
+    };
+    const art = imageKeys[kind];
+    const placeholder = kind === 'rocket' ? 'loot-rocket' : kind === 'blades' ? 'loot-blades' : 'loot-heal';
+    const texture = this.textures.exists(art) ? art : placeholder;
+    const sprite = this.add.image(x, y, texture).setDepth(12);
+    if (texture !== placeholder) sprite.setScale(65 / Math.max(sprite.width, sprite.height));
     this.loot.push({ sprite, kind });
   }
 
@@ -507,62 +559,49 @@ export class GameScene extends Phaser.Scene {
     this.ports.onHUD({
       hp: this.health, maxHP: 100, score: this.score, kills: this.kills,
       progress: Math.min(100, Math.round(this.player ? this.player.x / FINISH_X * 100 : 0)),
-      rocketLevel: this.rocketLevel, bladeLevel: this.bladeLevel, elapsed: this.elapsed
+      rocketLevel: this.rocketLevel, bladeLevel: this.bladeLevel, elapsed: this.elapsed,
+      shieldSeconds: Math.max(0, Math.ceil(this.shieldUntil - this.elapsed)),
+      speedSeconds: Math.max(0, Math.ceil(this.speedUntil - this.elapsed)),
+      rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed))
     });
   }
 
   private drawCity(): void {
-    const g = this.add.graphics().setDepth(0);
-    g.fillStyle(0x243044); g.fillRect(0, 0, FINISH_X + 800, HEIGHT);
-    g.fillStyle(0x857879); g.fillRect(0, 72, FINISH_X + 800, 55);
-    g.fillRect(0, 415, FINISH_X + 800, 55);
-    g.fillStyle(0x424652); g.fillRect(0, 127, FINISH_X + 800, 288);
-    g.fillStyle(0xd4baa0); g.fillRect(0, 116, FINISH_X + 800, 12);
-    g.fillRect(0, 414, FINISH_X + 800, 12);
-    g.fillStyle(0xe6bb78, 0.62);
-    for (let x = 10; x < FINISH_X; x += 95) g.fillRoundedRect(x, 268, 48, 5, 2);
-    for (let x = 200; x < FINISH_X; x += 860) {
-      g.fillStyle(0xc8b0a0, 0.6);
-      for (let line = 0; line < 7; line++) g.fillRect(x + line * 15, 131, 8, 77);
-      for (let line = 0; line < 7; line++) g.fillRect(x + line * 15, 336, 8, 76);
+    const totalWidth = FINISH_X + 800;
+    // Wide art-backed road. Repeating segments keeps the level lightweight.
+    if (this.textures.exists('street-art')) {
+      const street = this.add.tileSprite(0, 0, totalWidth, HEIGHT, 'street-art')
+        .setOrigin(0, 0).setDepth(0);
+      street.setTileScale(1, HEIGHT / 580);
+    } else {
+      const g = this.add.graphics().setDepth(0);
+      g.fillStyle(0x314052).fillRect(0, 0, totalWidth, HEIGHT);
+      g.fillStyle(0x494b56).fillRect(0, ROAD_TOP, totalWidth, ROAD_BOTTOM - ROAD_TOP);
+      g.fillStyle(0xe5d6b6, 0.6);
+      for (let x = 30; x < totalWidth; x += 120) g.fillRect(x, HEIGHT / 2 - 3, 62, 6);
     }
 
-    // Every run receives a new but readable street decoration pattern.
-    for (let x = 160; x < FINISH_X - 350; x += 255) {
-      const upper = Math.random() < 0.5;
-      const y = upper ? 45 : 481;
-      g.fillStyle(0x374e43); g.fillRoundedRect(x - 20, y - 14, 52, 35, 7);
-      g.fillStyle(0x5fa27b); g.fillCircle(x + 4, y, 23);
-      g.fillStyle(0x79c38f); g.fillCircle(x - 8, y - 10, 13);
-      g.fillStyle(0x273e35); g.lineStyle(2, 0x273e35); g.strokeCircle(x + 4, y, 23);
+    // Destination art: boss battle and destruction phases will be implemented
+    // separately. The damaged/burning variations are already preloaded.
+    const storeX = FINISH_X + 150;
+    const storeY = HEIGHT / 2;
+    if (this.textures.exists('bookstore-giunti')) {
+      const store = this.add.image(storeX, storeY, 'bookstore-giunti').setDepth(2);
+      store.setScale(1.22);
+    } else {
+      this.add.text(storeX, storeY, 'GIUNTI', {
+        fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
+        fontSize: '58px', color: '#f6e2b9'
+      }).setOrigin(0.5).setDepth(2);
     }
-    for (let i = 1; i < 10; i++) {
-      const x = i * 720;
-      g.fillStyle(0xf8f1d8, 0.18);
-      g.fillRoundedRect(x, 85, 170, 24, 6);
-      const signs = ['VIA DEI ROMANZI', 'PIAZZA COPERTINA', 'SALDI IMPOSSIBILI', 'STOP AGLI SPOILER'];
-      this.add.text(x + 85, 97, signs[i % signs.length], {
-        fontFamily: 'Arial, sans-serif', fontStyle: 'bold', fontSize: '13px', color: '#322e35'
-      }).setOrigin(0.5).setDepth(1);
-    }
-    // Fictional bookstore destination: a signpost for the next implementation.
-    const bx = FINISH_X + 20;
-    g.fillStyle(0x563450); g.fillRoundedRect(bx, 40, 460, 450, 10);
-    g.fillStyle(0xe4b268); g.fillRoundedRect(bx + 20, 90, 420, 76, 10);
-    g.fillStyle(0x271c32); g.fillRect(bx + 136, 205, 175, 284);
-    g.fillStyle(0x98dae0); g.fillRect(bx + 157, 221, 133, 240);
-    g.lineStyle(6, 0x43283e); g.strokeRect(bx + 157, 221, 133, 240);
-    this.add.text(bx + 230, 130, 'CARTAMARCIA', {
-      fontFamily: 'Arial, sans-serif', fontStyle: 'bold', fontSize: '35px', color: '#38253b'
-    }).setOrigin(0.5).setDepth(1);
-    this.add.text(bx + 228, 192, 'PROSSIMAMENTE: IL PROPRIETARIO', {
-      fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#f9e0ab'
-    }).setOrigin(0.5).setDepth(1);
-    g.lineStyle(9, 0xfae05b); g.lineBetween(FINISH_X - 80, ROAD_TOP + 8, FINISH_X - 80, ROAD_BOTTOM - 8);
-    this.add.text(FINISH_X - 96, 267, 'TRAGUARDO', {
-      fontFamily: 'Arial, sans-serif', fontStyle: 'bold', fontSize: '22px', color: '#f8e18c',
-      stroke: '#23182d', strokeThickness: 5
-    }).setOrigin(0.5).setRotation(-Math.PI / 2).setDepth(2);
+
+    const g = this.add.graphics().setDepth(3);
+    g.lineStyle(8, 0xf9e05b, 0.9);
+    g.lineBetween(FINISH_X - 80, ROAD_TOP, FINISH_X - 80, ROAD_BOTTOM);
+    this.add.text(FINISH_X - 99, HEIGHT / 2, 'TRAGUARDO', {
+      fontFamily: 'Arial, sans-serif', fontStyle: 'bold', fontSize: '23px',
+      color: '#fff1bb', stroke: '#23182d', strokeThickness: 5
+    }).setOrigin(0.5).setRotation(-Math.PI / 2).setDepth(4);
   }
 
   private makeTextures(): void {

@@ -113,6 +113,9 @@ const scene = new GameScene({
     const weapons = ['BEST SELLER LV.1'];
     if (data.rocketLevel) weapons.push('🚀 MISSILI LV.' + data.rocketLevel);
     if (data.bladeLevel) weapons.push('✂ LAME LV.' + data.bladeLevel);
+    if (data.shieldSeconds) weapons.push('🛡 SCUDO ' + data.shieldSeconds + 's');
+    if (data.speedSeconds) weapons.push('☕ TURBO ' + data.speedSeconds + 's');
+    if (data.rapidSeconds) weapons.push('⚡ RAFFICA ' + data.rapidSeconds + 's');
     loadout.textContent = weapons.join('   ·   ');
   },
   onEnd: (result: RunResult) => {
@@ -123,7 +126,7 @@ const scene = new GameScene({
       best = result.score;
       try { localStorage.setItem('veronikill-best-v1', String(best)); } catch { /* optional */ }
     }
-    title.textContent = result.outcome === 'won' ? 'CARTAMARCIA: RAGGIUNTA!' : 'FUORI CATALOGO!';
+    title.textContent = result.outcome === 'won' ? 'GIUNTI: RAGGIUNTA!' : 'FUORI CATALOGO!';
     copy.textContent = result.outcome === 'won'
       ? 'Veronica è arrivata alla libreria. Il proprietario si sta già preparando... La boss fight arriverà nel prossimo aggiornamento.'
       : 'I commessi hanno avuto la meglio, per questa volta. C’è sempre una seconda edizione.';

@@ -64,3 +64,18 @@ Gli asset grafici approvati sono ora caricati nel repository, nella cartella `pu
 Lo sprite viene caricato da Phaser durante `preload()` e sostituisce la sagoma provvisoria; il fallback grafico è mantenuto solo se un caricamento fallisce. La build conserva i PNG ufficiali senza sovrascriverli e include WebP nella cache offline PWA. La risoluzione degli asset è stata ottimizzata per la distribuzione mobile senza modificare le illustrazioni scelte.
 
 **Nota**: le pose in movimento non costituiscono ancora un'animazione frame-by-frame. Per la prossima milestone prevedere sprite sheet animata dedicata.
+
+## Grafica v0.2 — strada, nemici, oggetti e libreria Giunti
+
+Il gioco carica le grafiche reali da `public/assets/` in formato WebP:
+`street/street-segment.webp`, `enemies/{commesso,capo,cliente}.webp`,
+`items/{mitra,missile,lame,cura,scudo,caffe,munizioni}.webp` e
+`bookstore/{giunti,giunti-damaged,giunti-fire}.webp`.
+
+La strada è più alta (mondo 900 px), la telecamera segue Veronica anche in verticale
+e i nemici/oggetti ora utilizzano gli sprite illustrati.
+Sono attivi i pickup scudo temporaneo, caffè per la velocità e munizioni per la raffica.
+La libreria Giunti è visibile al traguardo; le versioni danneggiata e in fiamme
+sono risorse predisposte per la futura boss fight, non ancora una boss fight giocabile.
+
+Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o marchio.
