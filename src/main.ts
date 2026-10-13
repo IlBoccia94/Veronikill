@@ -28,6 +28,24 @@ const levelUpPanel = el<HTMLDivElement>('levelup-screen');
 const levelUpTitle = el<HTMLSpanElement>('levelup-level');
 const upgradeOptions = el<HTMLDivElement>('upgrade-options');
 
+// Boss HUD stays in DOM so it scales correctly with the landscape PWA viewport.
+const bossHud = document.createElement('div');
+bossHud.className = 'boss-hud hidden';
+bossHud.setAttribute('role', 'group');
+bossHud.setAttribute('aria-label', 'Salute del Direttore Generale');
+const bossHeading = document.createElement('div');
+bossHeading.className = 'boss-heading';
+bossHeading.textContent = 'IL DIRETTORE GENERALE';
+const bossTrack = document.createElement('div');
+bossTrack.className = 'boss-track';
+const bossFill = document.createElement('div');
+bossFill.className = 'boss-fill';
+bossTrack.append(bossFill);
+const bossCount = document.createElement('div');
+bossCount.className = 'boss-count';
+bossHud.append(bossHeading, bossTrack, bossCount);
+hud.append(bossHud);
+
 class TouchStick {
   private readonly region: HTMLElement;
   private readonly ring: HTMLElement;
@@ -124,6 +142,13 @@ const scene = new GameScene({
     hpText.textContent = String(Math.round(data.hp));
     scoreText.textContent = String(data.score);
     progressBar.style.width = data.progress + '%';
+    bossHud.classList.toggle('hidden', !data.bossActive);
+    if (data.bossActive) {
+      const fraction = Math.max(0, data.bossHP / Math.max(1, data.bossMaxHP));
+      bossFill.style.width = (fraction * 100).toFixed(1) + '%';
+      bossHud.classList.toggle('enraged', fraction <= 0.45);
+      bossCount.textContent = Math.ceil(data.bossHP) + ' / ' + data.bossMaxHP;
+    }
     xpBar.style.width = (100 * Math.min(data.xp, data.xpNeeded) / Math.max(1, data.xpNeeded)).toFixed(1) + '%';
     xpNumber.textContent = data.xp + ' / ' + data.xpNeeded + ' XP';
     levelText.textContent = 'LIV. ' + data.level;
@@ -184,9 +209,10 @@ const scene = new GameScene({
       best = result.score;
       try { localStorage.setItem('veronikill-best-v1', String(best)); } catch { /* optional */ }
     }
-    title.textContent = result.outcome === 'won' ? 'GIUNTI: RAGGIUNTA!' : 'FUORI CATALOGO!';
+    bossHud.classList.add('hidden');
+    title.textContent = result.outcome === 'won' ? 'MISSIONE COMPIUTA!' : 'FUORI CATALOGO!';
     copy.textContent = result.outcome === 'won'
-      ? 'Veronica è arrivata alla libreria. Il proprietario si sta già preparando... La boss fight arriverà nel prossimo aggiornamento.'
+      ? 'Direttore Generale sconfitto! La libreria è passata da integra a danneggiata e infine in fiamme. Veronica ha vinto la sua battaglia editoriale!'
       : 'I commessi hanno avuto la meglio, per questa volta. C’è sempre una seconda edizione.';
     subline.textContent = `KO: ${result.kills}  ·  PUNTI: ${result.score}  ·  RECORD: ${best}  ·  TEMPO: ${Math.round(result.seconds)}s`;
     playBtn.textContent = 'GIOCA ANCORA ➜';
