@@ -51,3 +51,7 @@ La PWA usa un service worker per conservare la shell e gli asset statici dopo il
 - `vite.config.ts`: PWA, cache offline e base path di GitHub Pages.
 
 Il marchio CartaMarcia è inventato. La violenza è esclusivamente slapstick/cartoon senza gore.
+
+## Artwork ufficiale
+
+La schermata iniziale è pronta a utilizzare `public/logo.png` e `public/veronica-hero.png`. Se le immagini non sono presenti, mostra i titoli e l'UI esistenti senza errori bloccanti. Il generatore PWA in `scripts/make-icons.mjs` ora mantiene eventuali PNG personalizzati `public/icon-192.png` e `public/icon-512.png` senza sovrascriverli durante la build. Finché questi asset non sono caricati nel repository, il gioco continuerà a mostrare le grafiche provvisorie.
