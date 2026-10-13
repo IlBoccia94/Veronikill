@@ -97,3 +97,14 @@ h1 { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: clamp(42px,
 .levelup-footer {margin-top:6px}
 .upgrade-options {gap:8px}
 }
+
+/* Art verification: show precisely which road and storefront are installed. */
+.art-preview { display:flex; gap:12px; align-items:center; justify-content:center; margin:4px auto 7px; max-width:480px; }
+.art-preview-road, .art-preview-store { position:relative; border:1px solid #fff0c480; border-radius:10px; background:#161b29cc; overflow:hidden; }
+.art-preview-road { flex:1.4; max-width:245px; height:clamp(50px,13vh,92px); }
+.art-preview-store { flex:.75; max-width:136px; height:clamp(50px,13vh,92px); }
+.art-preview img { display:block; width:100%; height:100%; object-fit:cover; }
+.art-preview-store img { object-fit:contain; }
+.art-preview span { position:absolute; bottom:0; left:0; right:0; padding:2px 4px; background:#21152cc9; font:900 11px 'Barlow Condensed', Impact, sans-serif; letter-spacing:1px; color:#fff2c4; text-shadow:0 1px #201b25; }
+.game-build-label { position:absolute; right:max(12px, env(safe-area-inset-right)); bottom:max(8px, env(safe-area-inset-bottom)); background:#24182ab8; border-radius:5px; padding:3px 6px; font:900 11px 'Barlow Condensed', Impact, sans-serif; color:#fff0bd; pointer-events:none; }
+@media (max-height:420px) { .art-preview { gap:7px; margin:0 auto 3px; } .art-preview-road, .art-preview-store { height:clamp(38px,12vh,60px); } .art-preview span { font-size:10px; } }

@@ -267,3 +267,26 @@ window.addEventListener('blur', () => {
 });
 el('game').addEventListener('contextmenu', event => event.preventDefault());
 showHUD(false);
+
+
+/**
+ * Refresh existing PWA installations when GitHub Pages publishes new assets.
+ * Never reload an active run: controllerchange reloads only on the title screen.
+ * Crucially, do NOT wipe origin-wide caches: other PWAs share this Pages domain.
+ */
+if ('serviceWorker' in navigator) {
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!wasControlled || refreshing || mode !== 'start') return;
+    refreshing = true;
+    window.location.reload();
+  });
+  const checkForUpdate = (): void => {
+    navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
+      .then(registration => registration?.update())
+      .catch(error => console.warn('Aggiornamento PWA non disponibile:', error));
+  };
+  if (document.readyState === 'complete') checkForUpdate();
+  else window.addEventListener('load', checkForUpdate, { once: true });
+}

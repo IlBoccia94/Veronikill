@@ -116,7 +116,7 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     const base = import.meta.env.BASE_URL;
     this.load.image('veronica-art', base + 'veronica-topdown.webp');
-    this.load.image('street-art', base + 'assets/street/street-segment.webp');
+    this.load.image('street-art', base + 'assets/street/street-v04.webp');
     for (const kind of ['commesso', 'capo', 'cliente']) {
       this.load.image('enemy-' + kind, base + 'assets/enemies/' + kind + '.webp');
     }
@@ -124,7 +124,7 @@ export class GameScene extends Phaser.Scene {
       this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
     }
     for (const kind of ['giunti', 'giunti-damaged', 'giunti-fire']) {
-      this.load.image('bookstore-' + kind, base + 'assets/bookstore/' + kind + '.webp');
+      this.load.image('bookstore-' + kind, base + 'assets/bookstore/' + kind + '-v04.webp');
     }
   }
 
@@ -139,6 +139,9 @@ export class GameScene extends Phaser.Scene {
     this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
     this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
     this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
+    // The old 1:1 camera cropped BOTH sidewalks from the visible 540px view
+    // into a 900px world; zooming out exposes the new road geometry immediately.
+    this.cameras.main.setZoom(0.74);
     this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
     this.cameras.main.roundPixels = true;
     this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
@@ -704,14 +707,23 @@ export class GameScene extends Phaser.Scene {
     const totalWidth = FINISH_X + 800;
     // Wide art-backed road. Repeating segments keeps the level lightweight.
     if (this.textures.exists('street-art')) {
-      const street = this.add.tileSprite(0, 0, totalWidth, HEIGHT, 'street-art')
-        .setOrigin(0, 0).setDepth(0);
-      // The new modular-art roadway repeats seamlessly along the extended route.
-      // Keep the pavement/curb proportions consistent when adapting its height.
-      const sourceHeight = this.textures.get('street-art').source[0].height;
-      const tileScale = HEIGHT / sourceHeight;
-      street.setTileScale(tileScale, tileScale);
+      // Repeat ordinary image quads rather than one 25,800-pixel TileSprite.
+      // Large TileSprite canvases may exceed GPU texture limits on mobile.
+      const source = this.textures.get('street-art').source[0];
+      const scale = HEIGHT / source.height;
+      const segmentWidth = source.width * scale;
+      for (let x = 0; x < totalWidth; x += segmentWidth) {
+        this.add.image(x, HEIGHT / 2, 'street-art')
+          .setOrigin(0, 0.5)
+          .setScale(scale)
+          .setDepth(0);
+      }
     } else {
+      // Never silently show the old placeholder as if the new artwork were loaded.
+      this.add.text(150, HEIGHT / 2, 'ERRORE: GRAFICA STRADA NON CARICATA', {
+        fontFamily: 'Arial, sans-serif', fontStyle: 'bold', fontSize: '24px',
+        color: '#ffbb71', stroke: '#21142b', strokeThickness: 5
+      }).setDepth(40);
       const g = this.add.graphics().setDepth(0);
       g.fillStyle(0x314052).fillRect(0, 0, totalWidth, HEIGHT);
       g.fillStyle(0x494b56).fillRect(0, ROAD_TOP, totalWidth, ROAD_BOTTOM - ROAD_TOP);
