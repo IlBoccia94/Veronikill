@@ -6,6 +6,7 @@ export type HUDState = {
   hp: number; maxHP: number; score: number; kills: number; progress: number;
   rocketLevel: number; bladeLevel: number; elapsed: number;
   shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
+  bossActive: boolean; bossHP: number; bossMaxHP: number;
   level: number; xp: number; xpNeeded: number;
   damageRank: number; fireRateRank: number; movementRank: number; armorRank: number;
 };
@@ -51,6 +52,15 @@ type Shot = {
 };
 type LootKind = 'rocket' | 'blades' | 'heal' | 'shield' | 'coffee' | 'ammo';
 type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
+type Boss = {
+  sprite: Phaser.GameObjects.Image;
+  aura: Phaser.GameObjects.Arc;
+  label: Phaser.GameObjects.Text;
+  hp: number; maxHP: number; lastBlade: number;
+  volleyTimer: number; ringTimer: number; dashTimer: number;
+  windup: number; dashLeft: number; dashX: number; dashY: number;
+};
+type BossPhase = 'travel' | 'combat' | 'damaged' | 'fire';
 
 const WIDTH = 960;
 const HEIGHT = 900;
@@ -106,7 +116,13 @@ export class GameScene extends Phaser.Scene {
   private fireRateRank = 0;
   private movementRank = 0;
   private armorRank = 0;
-
+  private bossPhase: BossPhase = 'travel';
+  private boss?: Boss;
+  private bossWarning?: Phaser.GameObjects.Graphics;
+  private bookstore?: Phaser.GameObjects.Image;
+  private bookstoreWidth = 0;
+  private bookstoreHeight = 0;
+  private destructionTimer = 0;
 
   constructor(ports: GamePorts) {
     super({ key: 'Game' });
@@ -178,6 +194,12 @@ export class GameScene extends Phaser.Scene {
     this.speedUntil = 0;
     this.rapidUntil = 0;
     this.winTriggered = false;
+    this.bossPhase = 'travel';
+    this.destructionTimer = 0;
+    if (this.bookstore && this.textures.exists('bookstore-giunti')) {
+      this.bookstore.setTexture('bookstore-giunti')
+        .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight).clearTint().setAlpha(1);
+    }
     this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
     this.playerShadow.setPosition(170, 470);
     this.cameras.main.centerOn(370, HEIGHT / 2);
@@ -286,18 +308,20 @@ export class GameScene extends Phaser.Scene {
 
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.elapsed += dt;
+    if (this.bossPhase === 'damaged' || this.bossPhase === 'fire') {
+      this.updateDestruction(dt);
+      return;
+    }
+
     this.updatePlayer(dt);
+    if (this.bossPhase === 'travel' && this.player.x >= FINISH_X - 560) this.startBossFight();
     this.updateWeapons(dt);
-    this.updateEnemies(dt);
+    if (this.bossPhase === 'damaged') return; // Blades can defeat the boss immediately.
+    if (this.bossPhase === 'travel') this.updateEnemies(dt);
+    if (this.bossPhase === 'combat') this.updateBoss(dt);
     this.updateShots(dt);
     this.updateLoot();
     this.cleanUp();
-
-    if (this.player.x >= FINISH_X - 80 && !this.winTriggered) {
-      this.winTriggered = true;
-      this.finish('won');
-      return;
-    }
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.08;
@@ -320,7 +344,9 @@ export class GameScene extends Phaser.Scene {
       move.x /= magnitude; move.y /= magnitude;
     }
     const speed = (this.elapsed < this.speedUntil ? 340 : 255) * (1 + this.movementRank * 0.07);
-    this.player.x = Phaser.Math.Clamp(this.player.x + move.x * speed * dt, 90, FINISH_X);
+    const minX = this.bossPhase === 'combat' ? FINISH_X - 1050 : 90;
+    const maxX = this.bossPhase === 'combat' ? FINISH_X - 85 : FINISH_X;
+    this.player.x = Phaser.Math.Clamp(this.player.x + move.x * speed * dt, minX, maxX);
     this.player.y = Phaser.Math.Clamp(this.player.y + move.y * speed * dt, ROAD_TOP + 34, ROAD_BOTTOM - 34);
     this.playerShadow.setPosition(this.player.x + 1, this.player.y + 20);
     this.player.setScale(this.playerScale * (1 + (magnitude > 0.07 ? Math.sin(this.elapsed * 17) * 0.022 : 0)));
@@ -360,9 +386,9 @@ export class GameScene extends Phaser.Scene {
       this.missileTimer -= dt;
       if (this.missileTimer <= 0 && this.shots.length < 140) {
         this.missileTimer = Math.max(1.35, 3.2 - this.rocketLevel * 0.5);
-        const target = this.nearestEnemy(480);
+        const target = this.nearestTargetFrom(this.player, 590);
         if (target) {
-          const angle = Math.atan2(target.sprite.y - this.player.y, target.sprite.x - this.player.x);
+          const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
           this.addShot(this.player.x, this.player.y, angle, 350, 43 + this.rocketLevel * 15, 'player', true);
         }
       }
@@ -379,6 +405,12 @@ export class GameScene extends Phaser.Scene {
             enemy.lastBlade = this.elapsed;
             this.hurtEnemy(enemy, 13 + this.bladeLevel * 7);
           }
+        }
+        const boss = this.boss;
+        if (this.bossPhase === 'combat' && boss && distance(blade, boss.sprite) < 82
+          && this.elapsed - boss.lastBlade > 0.30) {
+          boss.lastBlade = this.elapsed;
+          this.hurtBoss(14 + this.bladeLevel * 8);
         }
       }
     }
@@ -471,9 +503,9 @@ export class GameScene extends Phaser.Scene {
       if (shot.ttl <= 0) { shot.dead = true; shot.sprite.destroy(); continue; }
 
       if (shot.rocket) {
-        const target = this.nearestEnemyFrom(shot.sprite, 440);
+        const target = this.nearestTargetFrom(shot.sprite, 550);
         if (target) {
-          const desired = Math.atan2(target.sprite.y - shot.sprite.y, target.sprite.x - shot.sprite.x);
+          const desired = Math.atan2(target.y - shot.sprite.y, target.x - shot.sprite.x);
           const current = Math.atan2(shot.vy, shot.vx);
           const delta = Phaser.Math.Angle.Wrap(desired - current);
           const angle = current + Phaser.Math.Clamp(delta, -4 * dt, 4 * dt);
@@ -492,6 +524,14 @@ export class GameScene extends Phaser.Scene {
           shot.dead = true; shot.sprite.destroy();
         }
       } else {
+        const boss = this.boss;
+        if (this.bossPhase === 'combat' && boss && distance(shot.sprite, boss.sprite) < (shot.rocket ? 76 : 65)) {
+          this.hurtBoss(shot.power);
+          if (shot.rocket) this.explosion(shot.sprite.x, shot.sprite.y);
+          shot.dead = true;
+          shot.sprite.destroy();
+          continue;
+        }
         for (const enemy of this.enemies) {
           if (enemy.dead) continue;
           if (distance(shot.sprite, enemy.sprite) < (shot.rocket ? 28 : enemy.kind === 'capo' ? 31 : 24)) {
@@ -511,6 +551,197 @@ export class GameScene extends Phaser.Scene {
       if (!shot.dead && (shot.sprite.y < ROAD_TOP - 80 || shot.sprite.y > ROAD_BOTTOM + 80 || Math.abs(shot.sprite.x - this.player.x) > 1100)) {
         shot.dead = true; shot.sprite.destroy();
       }
+    }
+  }
+
+
+  private startBossFight(): void {
+    if (this.bossPhase !== 'travel') return;
+    this.bossPhase = 'combat';
+    // Clear stray foes and their shots: the encounter is readable on a phone.
+    for (const enemy of this.enemies) if (enemy.sprite.active) enemy.sprite.destroy();
+    this.enemies = [];
+    for (const shot of this.shots) {
+      if (shot.owner === 'enemy' && shot.sprite.active) {
+        shot.dead = true;
+        shot.sprite.destroy();
+      }
+    }
+    this.shots = this.shots.filter(shot => !shot.dead);
+
+    const x = FINISH_X - 190;
+    const y = HEIGHT / 2;
+    const aura = this.add.circle(x, y, 91, 0x53336e, 0.23)
+      .setStrokeStyle(4, 0xf6c85e, 0.9).setDepth(18);
+    const texture = this.textures.exists('enemy-capo') ? 'enemy-capo' : 'capo';
+    const sprite = this.add.image(x, y, texture).setDisplaySize(154, 154).setDepth(24);
+    const label = this.add.text(x, y - 108, 'DIRETTORE GENERALE', {
+      fontFamily: 'Arial, sans-serif', fontSize: '18px', fontStyle: 'bold',
+      color: '#fff1b8', stroke: '#27162e', strokeThickness: 5
+    }).setOrigin(0.5).setDepth(25);
+    const maxHP = 1800 + this.level * 115;
+    this.boss = {
+      sprite, aura, label, hp: maxHP, maxHP, lastBlade: -10,
+      volleyTimer: 1.0, ringTimer: 3.6, dashTimer: 4.5,
+      windup: 0, dashLeft: 0, dashX: 0, dashY: 0
+    };
+    this.bossWarning = this.add.graphics().setDepth(19);
+    if (this.health < this.maxHP * 0.62) {
+      this.placeLoot('heal', this.player.x + 72, Phaser.Math.Clamp(this.player.y + 120, ROAD_TOP + 95, ROAD_BOTTOM - 95));
+    }
+    this.popText(x - 180, y - 155, 'IL DIRETTORE È ARRIVATO!', '#ffe08c');
+    this.cameras.main.shake(240, 0.002);
+    this.emitHUD();
+  }
+
+  private bossShot(x: number, y: number, angle: number, speed: number, damage: number, tint: number): void {
+    if (this.shots.length >= 135) return;
+    this.addShot(x, y, angle, speed, damage, 'enemy', false);
+    const shot = this.shots[this.shots.length - 1];
+    shot.ttl = 2.45;
+    shot.sprite.setTint(tint).setScale(1.3);
+  }
+
+  private updateBoss(dt: number): void {
+    const boss = this.boss;
+    if (!boss) return;
+    const s = boss.sprite;
+    const enraged = boss.hp <= boss.maxHP * 0.45;
+    boss.volleyTimer -= dt;
+    boss.ringTimer -= dt;
+    boss.dashTimer -= dt;
+
+    if (boss.dashLeft > 0) {
+      boss.dashLeft -= dt;
+      s.x += boss.dashX * 670 * dt;
+      s.y += boss.dashY * 670 * dt;
+      s.setTint(0xff9e78);
+    } else if (boss.windup > 0) {
+      boss.windup -= dt;
+      s.setTint(0xffe28b);
+      const range = 430;
+      this.bossWarning?.clear().lineStyle(12, 0xff7a7f, 0.50)
+        .lineBetween(s.x, s.y, s.x + boss.dashX * range, s.y + boss.dashY * range);
+      if (boss.windup <= 0) {
+        boss.dashLeft = 0.46;
+        this.bossWarning?.clear();
+      }
+    } else {
+      this.bossWarning?.clear();
+      s.clearTint();
+      const targetX = Phaser.Math.Clamp(this.player.x + 190, FINISH_X - 510, FINISH_X - 170);
+      const targetY = Phaser.Math.Clamp(this.player.y + Math.sin(this.elapsed * 1.5) * 125, ROAD_TOP + 115, ROAD_BOTTOM - 115);
+      const speed = enraged ? 114 : 82;
+      s.x += Phaser.Math.Clamp(targetX - s.x, -speed * dt, speed * dt);
+      s.y += Phaser.Math.Clamp(targetY - s.y, -speed * dt, speed * dt);
+
+      if (boss.dashTimer <= 0) {
+        const angle = Math.atan2(this.player.y - s.y, this.player.x - s.x);
+        boss.dashX = Math.cos(angle);
+        boss.dashY = Math.sin(angle);
+        boss.windup = 0.70;
+        boss.dashTimer = enraged ? 3.7 : 5.4;
+      }
+      if (boss.volleyTimer <= 0) {
+        const angle = Math.atan2(this.player.y - s.y, this.player.x - s.x);
+        const count = enraged ? 7 : 5;
+        for (let i = 0; i < count; i++) {
+          this.bossShot(s.x, s.y, angle + (i - (count - 1) / 2) * 0.13,
+            enraged ? 310 : 265, enraged ? 13 : 11, 0xffb667);
+        }
+        boss.volleyTimer = enraged ? 1.15 : 1.85;
+      }
+      if (boss.ringTimer <= 0) {
+        const count = enraged ? 14 : 10;
+        for (let i = 0; i < count; i++) {
+          const angle = Math.PI * 2 * i / count + this.elapsed * 0.4;
+          this.bossShot(s.x, s.y, angle, enraged ? 260 : 210, 10, 0xf7a8ff);
+        }
+        boss.ringTimer = enraged ? 3.5 : 5.3;
+        this.explosion(s.x, s.y);
+      }
+    }
+
+    s.x = Phaser.Math.Clamp(s.x, FINISH_X - 900, FINISH_X - 115);
+    s.y = Phaser.Math.Clamp(s.y, ROAD_TOP + 86, ROAD_BOTTOM - 86);
+    s.setFlipX(this.player.x < s.x);
+    boss.aura.setPosition(s.x, s.y).setScale(1 + Math.sin(this.elapsed * 4) * 0.05);
+    boss.label.setPosition(s.x, s.y - 112);
+    if (distance(s, this.player) < 75) {
+      this.hurtPlayer(enraged ? 23 : 17, this.player.x - s.x, this.player.y - s.y);
+    }
+  }
+
+  private hurtBoss(power: number): void {
+    const boss = this.boss;
+    if (!boss || this.bossPhase !== 'combat') return;
+    boss.hp = Math.max(0, boss.hp - power);
+    if (boss.hp <= 0) {
+      this.defeatBoss();
+      return;
+    }
+    this.emitHUD();
+  }
+
+  private defeatBoss(): void {
+    const boss = this.boss;
+    if (!boss || this.bossPhase !== 'combat') return;
+    this.bossPhase = 'damaged';
+    this.destructionTimer = 1.55;
+    this.score += 1500;
+    this.kills += 1;
+    const { x, y } = boss.sprite;
+    this.popText(x, y - 65, 'DIRETTORE LICENZIATO!', '#ffe1a0');
+    this.explosion(x, y);
+    boss.sprite.destroy();
+    boss.aura.destroy();
+    boss.label.destroy();
+    this.boss = undefined;
+    this.bossWarning?.destroy();
+    this.bossWarning = undefined;
+    for (const shot of this.shots) if (shot.sprite.active) shot.sprite.destroy();
+    this.shots = [];
+    if (this.bookstore && this.textures.exists('bookstore-giunti-damaged')) {
+      this.bookstore.setTexture('bookstore-giunti-damaged')
+        .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight);
+    }
+    this.cameras.main.shake(430, 0.004);
+    this.emitHUD();
+  }
+
+  private updateDestruction(dt: number): void {
+    this.destructionTimer -= dt;
+    if (this.destructionTimer > 0) return;
+    if (this.bossPhase === 'damaged') {
+      this.bossPhase = 'fire';
+      this.destructionTimer = 3.2;
+      if (this.bookstore && this.textures.exists('bookstore-giunti-fire')) {
+        this.bookstore.setTexture('bookstore-giunti-fire')
+          .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight);
+      }
+      this.spawnFinalFlames();
+      this.cameras.main.shake(600, 0.006);
+      this.popText(FINISH_X + 85, HEIGHT / 2 - 135, 'FUORI CATALOGO!', '#ffc373');
+    } else if (this.bossPhase === 'fire' && !this.winTriggered) {
+      this.winTriggered = true;
+      this.finish('won');
+    }
+  }
+
+  private spawnFinalFlames(): void {
+    // Cartoon celebration, not a persistent particle emitter (mobile-friendly).
+    for (let i = 0; i < 19; i++) {
+      const x = FINISH_X + 150 + randomBetween(-145, 145);
+      const y = HEIGHT / 2 + randomBetween(-150, 160);
+      const flame = this.add.circle(x, y, randomBetween(8, 20),
+        i % 2 ? 0xff7a35 : 0xffd258, 0.78).setDepth(27);
+      this.tweens.add({
+        targets: flame, y: y - randomBetween(95, 185),
+        alpha: 0, scaleX: 0.4, scaleY: 1.6,
+        duration: randomBetween(900, 1800),
+        delay: randomBetween(0, 500),
+        onComplete: () => flame.destroy()
+      });
     }
   }
 
@@ -578,16 +809,18 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private nearestEnemy(range: number): Enemy | undefined {
-    return this.nearestEnemyFrom(this.player, range);
-  }
-  private nearestEnemyFrom(origin: { x: number; y: number }, range: number): Enemy | undefined {
-    let best: Enemy | undefined;
+  // Homing missiles consider the director a valid enemy, not only ordinary mobs.
+  private nearestTargetFrom(origin: { x: number; y: number }, range: number): Phaser.GameObjects.Image | undefined {
+    let best: Phaser.GameObjects.Image | undefined;
     let bestDistance = range;
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
       const d = distance(origin, enemy.sprite);
-      if (d < bestDistance) { bestDistance = d; best = enemy; }
+      if (d < bestDistance) { bestDistance = d; best = enemy.sprite; }
+    }
+    if (this.bossPhase === 'combat' && this.boss) {
+      const d = distance(origin, this.boss.sprite);
+      if (d < bestDistance) best = this.boss.sprite;
     }
     return best;
   }
@@ -677,6 +910,14 @@ export class GameScene extends Phaser.Scene {
     for (const shot of this.shots) if (shot.sprite.active) shot.sprite.destroy();
     for (const pick of this.loot) if (pick.sprite.active) pick.sprite.destroy();
     for (const blade of this.blades) if (blade.active) blade.destroy();
+    if (this.boss) {
+      this.boss.sprite.destroy();
+      this.boss.aura.destroy();
+      this.boss.label.destroy();
+      this.boss = undefined;
+    }
+    this.bossWarning?.destroy();
+    this.bossWarning = undefined;
     this.enemies = []; this.shots = []; this.loot = []; this.blades = [];
   }
 
@@ -697,6 +938,8 @@ export class GameScene extends Phaser.Scene {
       shieldSeconds: Math.max(0, Math.ceil(this.shieldUntil - this.elapsed)),
       speedSeconds: Math.max(0, Math.ceil(this.speedUntil - this.elapsed)),
       rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed)),
+      bossActive: this.bossPhase === 'combat' && !!this.boss,
+      bossHP: this.boss?.hp ?? 0, bossMaxHP: this.boss?.maxHP ?? 1,
       level: this.level, xp: this.xp, xpNeeded: this.xpNeeded(),
       damageRank: this.damageRank, fireRateRank: this.fireRateRank,
       movementRank: this.movementRank, armorRank: this.armorRank
@@ -739,6 +982,9 @@ export class GameScene extends Phaser.Scene {
     if (this.textures.exists('bookstore-giunti')) {
       const store = this.add.image(storeX, storeY, 'bookstore-giunti').setDepth(2);
       store.setScale(1.22);
+      this.bookstore = store;
+      this.bookstoreWidth = store.displayWidth;
+      this.bookstoreHeight = store.displayHeight;
     } else {
       this.add.text(storeX, storeY, 'GIUNTI', {
         fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
