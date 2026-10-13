@@ -23,6 +23,34 @@ button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparen
 .progress-track { height: 8px; position: absolute; top: 56px; width: min(38%, 400px); left: 50%; transform: translateX(-50%); background: #231829d9; border: 1px solid #debf87; border-radius: 10px; }
 #progress-bar { height: 100%; width: 0; border-radius: 10px; background: #dcfc78; transition: width .2s linear; }
 .progress-track span { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); font-family: 'Barlow Condensed', Impact, sans-serif; font-weight: 800; letter-spacing: 1px; white-space: nowrap; font-size: 12px; color: #fdf3ce; text-shadow: 0 2px 4px #271727; }
+/* Boss bar: deliberately separate from the standard HP/progress HUD. */
+.boss-hud {
+  position: absolute; z-index: 5; top: clamp(108px, 24vh, 148px); left: 50%;
+  width: min(460px, 51vw); transform: translateX(-50%);
+  padding: 6px 12px 9px; text-align: center; border-radius: 11px;
+  background: linear-gradient(180deg, #241529ee, #291b37dc);
+  border: 2px solid #e5ab51; box-shadow: 0 4px 19px #0007;
+}
+.boss-heading {
+  font: 900 clamp(13px, 2.4vw, 20px)/1.1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: 2px; color: #ffe19c; text-shadow: 0 2px #31192e;
+}
+.boss-track {
+  height: 13px; margin-top: 5px; background: #4b263e;
+  border-radius: 10px; overflow: hidden; border: 2px solid #f2ca83;
+}
+.boss-fill {
+  width: 100%; height: 100%; background: linear-gradient(90deg, #d45393, #ffae4b);
+  transition: width .13s linear;
+}
+.boss-hud.enraged { border-color: #ff7782; }
+.boss-hud.enraged .boss-heading { color: #ffb8b8; }
+.boss-hud.enraged .boss-fill { background: linear-gradient(90deg, #ef345d, #ff764b); }
+.boss-count { font-size: 10px; font-weight: 900; margin-top: 3px; color: #f7d9bd; }
+@media (max-height: 400px) {
+  .boss-hud { top: 106px; padding: 4px 10px; }
+  .boss-count { display: none; }
+}
 .loadout { position: absolute; top: 81px; left: 50%; transform: translateX(-50%); background: #21182aaa; border: 1px solid #eac78b66; border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 900; white-space: nowrap; text-align: center; text-shadow: 0 2px 4px #21182a; }
 #mobile-controls { position: absolute; z-index: 5; inset: 0; pointer-events: none; }
 .stick-zone { width: min(31vw, 174px); height: min(31vw, 174px); max-height: 34vh; max-width: 34vh; position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; touch-action: none; pointer-events: auto; user-select: none; }
