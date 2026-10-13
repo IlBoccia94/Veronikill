@@ -706,7 +706,11 @@ export class GameScene extends Phaser.Scene {
     if (this.textures.exists('street-art')) {
       const street = this.add.tileSprite(0, 0, totalWidth, HEIGHT, 'street-art')
         .setOrigin(0, 0).setDepth(0);
-      street.setTileScale(1, HEIGHT / 580);
+      // V4 artwork is a mirrored, horizontally seamless street image.
+      // Keep the pavement/curb proportions consistent when adapting its height.
+      const sourceHeight = this.textures.get('street-art').source[0].height;
+      const tileScale = HEIGHT / sourceHeight;
+      street.setTileScale(tileScale, tileScale);
     } else {
       const g = this.add.graphics().setDepth(0);
       g.fillStyle(0x314052).fillRect(0, 0, totalWidth, HEIGHT);
@@ -715,8 +719,9 @@ export class GameScene extends Phaser.Scene {
       for (let x = 30; x < totalWidth; x += 120) g.fillRect(x, HEIGHT / 2 - 3, 62, 6);
     }
 
-    // Destination art: boss battle and destruction phases will be implemented
-    // separately. The damaged/burning variations are already preloaded.
+    // The blue Giunti bookstore is a real transparent sprite cropped from the
+    // approved art sheet. Alternate damaged/burning textures are preloaded for
+    // future encounter phases, without changing the current victory logic.
     const storeX = FINISH_X + 150;
     const storeY = HEIGHT / 2;
     if (this.textures.exists('bookstore-giunti')) {

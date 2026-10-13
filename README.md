@@ -90,3 +90,16 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - Le migliorie permanenti valgono per la run corrente. I pickup sulla strada restano disponibili.
 - Le soglie XP aumentano con il livello e l'XP in eccesso viene conservata.
 - La difficoltà cresce gradualmente lungo il percorso; la boss fight resta una milestone successiva.
+
+
+## Graphics update v0.4 — Street & Giunti
+
+- The level now uses the supplied wide top-down road art, converted into a horizontally seamless scrolling WebP texture at `public/assets/street/street-segment.webp` (1920×900).
+- The source modular road tileset is also saved as `public/assets/street/street-tiles-v2.webp` for future variations.
+- The destination now uses the approved **blue-and-white Giunti branding**. Transparent sprites, cut out from the updated source art, live at:
+  - `public/assets/bookstore/giunti.webp`
+  - `public/assets/bookstore/giunti-damaged.webp`
+  - `public/assets/bookstore/giunti-fire.webp`
+- The original updated graphics atlas is retained at `public/assets/bookstore/giunti-atlas-v2.webp`.
+- The game preserves the 25,000-unit extended route and vertical camera movement; only background/store graphics changed in this update.
+- The alternate store states are loaded and ready for future encounter sequences; the game currently displays the intact storefront at the finish line.
