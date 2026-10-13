@@ -7,7 +7,7 @@ export type HUDState = {
   rocketLevel: number; bladeLevel: number; elapsed: number;
   shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
   level: number; xp: number; xpNeeded: number;
-  damageRank: number; fireRateRank: number; movementRank: number; armorRank: number; maxHP: number;
+  damageRank: number; fireRateRank: number; movementRank: number; armorRank: number;
 };
 export type RunResult = { outcome: 'won' | 'lost'; score: number; kills: number; seconds: number };
 
@@ -696,7 +696,7 @@ export class GameScene extends Phaser.Scene {
       rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed)),
       level: this.level, xp: this.xp, xpNeeded: this.xpNeeded(),
       damageRank: this.damageRank, fireRateRank: this.fireRateRank,
-      movementRank: this.movementRank, armorRank: this.armorRank, maxHP: this.maxHP
+      movementRank: this.movementRank, armorRank: this.armorRank
     });
   }
 
