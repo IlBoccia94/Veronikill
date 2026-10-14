@@ -498,7 +498,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.player.x >= this.nextLootX) {
-      const pool: LootKind[] = ['rocket', 'blades', 'heal', 'shield', 'rocket', 'coffee', 'blades', 'ammo']
+      const pool = (['rocket', 'blades', 'heal', 'shield', 'rocket', 'coffee', 'blades', 'ammo'] as LootKind[])
         .filter(kind => !this.isLootMaxed(kind));
       const type = pool[this.lootIndex % pool.length];
       if (type) this.placeLoot(type, this.player.x + 290,
