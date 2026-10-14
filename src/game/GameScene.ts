@@ -134,7 +134,7 @@ export class GameScene extends Phaser.Scene {
     const base = import.meta.env.BASE_URL;
     this.load.image('veronica-art', base + 'veronica-topdown.webp');
     this.load.image('street-art', base + 'assets/street/street-v04.webp');
-    for (const kind of ['commesso', 'capo', 'cliente']) {
+    for (const kind of ['commesso', 'capo', 'cliente', 'direttore']) {
       this.load.image('enemy-' + kind, base + 'assets/enemies/' + kind + '.webp');
     }
     for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
@@ -585,7 +585,8 @@ export class GameScene extends Phaser.Scene {
     const y = HEIGHT / 2;
     const aura = this.add.circle(x, y, 91, 0x53336e, 0.23)
       .setStrokeStyle(4, 0xf6c85e, 0.9).setDepth(18);
-    const texture = this.textures.exists('enemy-capo') ? 'enemy-capo' : 'capo';
+    // Keep the original Director General art independent of the new caporeparto mob.
+    const texture = this.textures.exists('enemy-direttore') ? 'enemy-direttore' : 'capo';
     const sprite = this.add.image(x, y, texture).setDisplaySize(154, 154).setDepth(24);
     const maxHP = 1800 + this.level * 115;
     this.boss = {
