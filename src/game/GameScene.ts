@@ -147,11 +147,12 @@ export class GameScene extends Phaser.Scene {
     const base = import.meta.env.BASE_URL;
     this.load.image('veronica-art', base + 'veronica-topdown.webp');
     this.load.image('street-art', base + 'assets/street/street-v04.webp');
-    for (const kind of ['commesso', 'capo', 'cliente', 'direttore']) {
-      // Versioned mob URLs prevent a previously installed PWA from reusing the old art.
-      const file = kind === 'commesso' || kind === 'capo' ? kind + '-v2.webp' : kind + '.webp';
-      this.load.image('enemy-' + kind, base + 'assets/enemies/' + file);
-    }
+    // Independent illustrated enemy sprites, with cache-busting names for PWA installs.
+    this.load.image('enemy-commesso', base + 'assets/enemies/commesso-v3.webp');
+    this.load.image('enemy-capo', base + 'assets/enemies/capo-v2.webp');
+    this.load.image('enemy-cliente', base + 'assets/enemies/cliente.webp');
+    this.load.image('enemy-direttore', base + 'assets/enemies/direttore.webp');
+    this.load.image('enemy-responsabile', base + 'assets/enemies/responsabile-v1.webp');
     for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
       this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
     }
@@ -1037,14 +1038,13 @@ export class GameScene extends Phaser.Scene {
       cliente: { hp: 57, speed: 91, damage: 11, texture: 'cliente' },
       responsabile: { hp: 510 + this.level * 35, speed: 185, damage: 20, texture: 'commesso' }
     }[kind];
-    const textureKey = kind === 'responsabile' ? 'enemy-commesso' : 'enemy-' + kind;
+    const textureKey = 'enemy-' + kind;
     const texture = this.textures.exists(textureKey) ? textureKey : spec.texture;
     const sprite = this.add.image(x, y, texture).setDepth(18);
     if (texture !== spec.texture) {
       const width = kind === 'responsabile' ? 132 : kind === 'capo' ? 98 : kind === 'commesso' ? 82 : 70;
       sprite.setScale(width / sprite.width);
     }
-    if (kind === 'responsabile') sprite.setTint(0xe9b5ff);
     const enemy: Enemy = {
       sprite, kind, hp: Math.round(spec.hp * (1 + progress * 0.4)),
       speed: spec.speed * (1 + progress * 0.14), damage: spec.damage,
