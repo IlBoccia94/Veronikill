@@ -27,7 +27,9 @@ const xpBar = el<HTMLDivElement>('xp-bar');
 const xpNumber = el<HTMLSpanElement>('xp-number');
 const levelText = el<HTMLSpanElement>('player-level');
 const levelUpPanel = el<HTMLDivElement>('levelup-screen');
-const levelUpTitle = el<HTMLSpanElement>('levelup-level');
+const levelUpHeading = el<HTMLHeadingElement>('levelup-title');
+const levelUpEyebrow = el<HTMLParagraphElement>('levelup-eyebrow');
+const levelUpHelp = el<HTMLParagraphElement>('levelup-help');
 const upgradeOptions = el<HTMLDivElement>('upgrade-options');
 
 // Boss HUD stays in DOM so it scales correctly with the landscape PWA viewport.
@@ -47,6 +49,21 @@ const bossCount = document.createElement('div');
 bossCount.className = 'boss-count';
 bossHud.append(bossHeading, bossTrack, bossCount);
 hud.append(bossHud);
+
+// Short event status with timer/health at the upper edge; never on top of enemies.
+const eventHud = document.createElement('div');
+eventHud.className = 'event-hud hidden';
+const eventHeading = document.createElement('strong');
+eventHeading.className = 'event-heading';
+const eventDetail = document.createElement('span');
+eventDetail.className = 'event-detail';
+const eventTrack = document.createElement('div');
+eventTrack.className = 'event-meter';
+const eventFill = document.createElement('div');
+eventFill.className = 'event-fill';
+eventTrack.append(eventFill);
+eventHud.append(eventHeading, eventDetail, eventTrack);
+hud.append(eventHud);
 
 // Peripheral, short-lived notices. No floating world labels over Veronica or enemies.
 const notice = document.createElement('div');
@@ -185,6 +202,13 @@ const scene = new GameScene({
     if (progressLabel) progressLabel.textContent = 'LIBRERIA · ' + data.progress + '%';
     progressWidget?.classList.toggle('hidden', data.bossActive);
     bossHud.classList.toggle('hidden', !data.bossActive);
+    eventHud.classList.toggle('hidden', !data.eventTitle || data.bossActive);
+    if (data.eventTitle && !data.bossActive) {
+      eventHeading.textContent = data.eventTitle;
+      const timer = data.eventSeconds > 0 ? ' · ' + data.eventSeconds + 's' : '';
+      eventDetail.textContent = data.eventDetail + timer;
+      eventFill.style.width = Math.max(0, Math.min(100, data.eventFraction * 100)).toFixed(1) + '%';
+    }
     if (data.bossActive) {
       const fraction = Math.max(0, data.bossHP / Math.max(1, data.bossMaxHP));
       bossFill.style.width = (fraction * 100).toFixed(1) + '%';
@@ -211,10 +235,12 @@ const scene = new GameScene({
     renderLoadout(chips);
   },
   onNotice: showNotice,
-  onLevelUp: ({ level, options }: LevelUpChoice) => {
+  onLevelUp: ({ level, options, title, eyebrow, help }: LevelUpChoice) => {
     mode = 'levelup';
     activeLevelOptions = options;
-    levelUpTitle.textContent = String(level);
+    levelUpHeading.textContent = title ?? 'LIVELLO ' + level;
+    levelUpEyebrow.textContent = eyebrow ?? 'NUOVO CAPITOLO!';
+    levelUpHelp.textContent = help ?? 'Scegli un potenziamento. Il gioco è in pausa.';
     upgradeOptions.replaceChildren();
     for (const option of options) {
       const card = document.createElement('button');
@@ -258,6 +284,7 @@ const scene = new GameScene({
       try { localStorage.setItem('veronikill-best-v1', String(best)); } catch { /* optional */ }
     }
     bossHud.classList.add('hidden');
+    eventHud.classList.add('hidden');
     notice.classList.add('hidden');
     window.clearTimeout(noticeTimeout);
     title.textContent = result.outcome === 'won' ? 'MISSIONE COMPIUTA!' : 'FUORI CATALOGO!';
