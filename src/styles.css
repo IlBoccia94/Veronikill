@@ -136,3 +136,102 @@ h1 { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: clamp(42px,
 .art-preview span { position:absolute; bottom:0; left:0; right:0; padding:2px 4px; background:#21152cc9; font:900 11px 'Barlow Condensed', Impact, sans-serif; letter-spacing:1px; color:#fff2c4; text-shadow:0 1px #201b25; }
 .game-build-label { position:absolute; right:max(12px, env(safe-area-inset-right)); bottom:max(8px, env(safe-area-inset-bottom)); background:#24182ab8; border-radius:5px; padding:3px 6px; font:900 11px 'Barlow Condensed', Impact, sans-serif; color:#fff0bd; pointer-events:none; }
 @media (max-height:420px) { .art-preview { gap:7px; margin:0 auto 3px; } .art-preview-road, .art-preview-store { height:clamp(38px,12vh,60px); } .art-preview span { font-size:10px; } }
+
+
+/* v0.6 — Edge-first mobile HUD
+   Keep the middle of the road open for the hero, foes and pickups.
+   Left: health + XP. Center at TOP only: route or boss. Right: score + pause + toast.
+   Bottom CENTER, between touch joysticks: compact upgrade inventory. */
+#hud { overflow: hidden; }
+.hud-top {
+  position: absolute; top: 0; left: 0; right: 0; min-height: 42px;
+  display: flex; align-items: center; gap: 10px;
+  padding: max(5px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+}
+.hp-group { min-width: 0; flex-shrink: 0; gap: 5px; }
+.hp-label { font-size: clamp(12px, 1.7vw, 16px); }
+.hp-track { width: clamp(72px, 11vw, 146px); height: 12px; border-width: 2px; }
+#hp-text { font-size: 12px; min-width: 24px; }
+.hud-score { padding: 2px 8px; gap: 4px; border-width: 1px; border-radius: 9px; }
+.hud-score span { font-size: 10px; }
+.hud-score b { font-size: clamp(16px, 2.4vw, 23px); }
+.square-btn { min-width: 35px; min-height: 32px; font-size: 18px; border-width: 1px; border-radius: 8px; }
+
+.progress-track {
+  top: max(8px, env(safe-area-inset-top)); left: 50%;
+  width: min(32vw, 330px); height: 8px;
+  transform: translateX(-50%); border: 1px solid #efdbb0;
+}
+.progress-track span { top: 9px; font-size: clamp(9px, 1.2vw, 11px); letter-spacing: .6px; }
+
+.boss-hud {
+  top: max(3px, env(safe-area-inset-top)); left: 50%;
+  width: min(32vw, 330px); padding: 3px 9px 4px;
+  transform: translateX(-50%); border-width: 1px; border-radius: 9px;
+}
+.boss-heading { font-size: clamp(11px, 1.8vw, 16px); letter-spacing: 1px; }
+.boss-track { height: 10px; margin-top: 3px; border-width: 1px; }
+.boss-count { font-size: 9px; margin-top: 1px; line-height: 1; }
+
+.xp-widget {
+  top: max(48px, calc(env(safe-area-inset-top) + 43px));
+  left: max(10px, env(safe-area-inset-left));
+  padding: 3px 6px; gap: 5px; box-shadow: none; border-radius: 8px;
+}
+.xp-level { font-size: 12px; }
+.xp-meter { width: clamp(55px, 8vw, 104px); height: 8px; border-width: 1px; }
+.xp-number { font-size: 9px; }
+
+.hud-notice {
+  position: absolute; z-index: 6;
+  top: max(48px, calc(env(safe-area-inset-top) + 43px));
+  right: max(10px, env(safe-area-inset-right));
+  max-width: min(38vw, 330px); min-height: 25px;
+  padding: 5px 10px; border-radius: 8px;
+  background: #23172ddd; border: 1px solid #ebbd77;
+  text-align: right;
+  font: 900 clamp(10px, 1.35vw, 13px)/1.25 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: .4px; color: #ffdfaa; text-shadow: 0 1px #291729;
+  box-shadow: 0 3px 10px #0004;
+}
+.loadout {
+  top: auto; bottom: max(4px, env(safe-area-inset-bottom)); left: 50%;
+  width: min(56vw, 615px); max-width: 56vw; max-height: 74px;
+  display: flex; align-items: flex-end; align-content: flex-end; justify-content: center;
+  gap: 3px 4px; flex-wrap: wrap; overflow: hidden; transform: translateX(-50%);
+  background: none; border: 0; box-shadow: none; border-radius: 0;
+  padding: 0; font-size: inherit; line-height: normal; text-shadow: none;
+}
+.loadout-chip {
+  display: inline-flex; white-space: nowrap; align-items: center; flex-shrink: 0;
+  min-height: 21px; padding: 3px 6px; border-radius: 7px;
+  background: #241a34e8; border: 1px solid #cca97b99;
+  font: 900 clamp(9px, 1.05vw, 12px)/1 'Barlow Condensed', Impact, sans-serif;
+  letter-spacing: .2px; color: #ffe8bb; box-shadow: 0 2px 5px #0004;
+}
+.loadout-chip.maxed { border-color: #8fe6b8; color: #baffd5; background: #123e3ae8; }
+.loadout-chip.temporary { border-color: #ffca75; color: #fff0a9; }
+
+@media (max-height: 420px) {
+  .hud-top { min-height: 34px; padding-top: max(2px, env(safe-area-inset-top)); }
+  .progress-track { top: max(6px, env(safe-area-inset-top)); }
+  .boss-hud { top: max(2px, env(safe-area-inset-top)); padding: 2px 7px; }
+  .boss-heading { font-size: 11px; }
+  .boss-count { display: none; }
+  .xp-widget, .hud-notice { top: max(39px, calc(env(safe-area-inset-top) + 35px)); }
+  .xp-widget { padding: 2px 5px; }
+  .xp-number { font-size: 8px; }
+  .loadout { bottom: max(2px, env(safe-area-inset-bottom)); max-height: 54px; gap: 2px 3px; }
+  .loadout-chip { min-height: 18px; padding: 2px 5px; font-size: 9px; }
+}
+@media (max-width: 700px) and (orientation: landscape) {
+  .hud-top { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); gap: 6px; }
+  .hp-label { font-size: 11px; }
+  .hp-track { width: 62px; height: 10px; }
+  .hud-score { padding: 2px 5px; }
+  .hud-score b { font-size: 16px; }
+  .progress-track, .boss-hud { width: 30vw; }
+  .progress-track span { font-size: 9px; }
+  .loadout { width: 51vw; max-width: 51vw; }
+  .loadout-chip { font-size: 8px; padding: 2px 4px; }
+}
