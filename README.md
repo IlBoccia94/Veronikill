@@ -4,7 +4,7 @@ Shooter arcade top-down progettato per telefono (landscape) e browser desktop. P
 
 ## Stato
 
-**Versione corrente v0.5**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta di tre potenziamenti al level-up. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
+**Versione corrente v0.6**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta dei potenziamenti al level-up, HUD compatta sui bordi e miglioramenti fino al livello 5. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
 
 **Da aggiungere**: sprite illustrato specifico del Direttore (attualmente usa lo sprite del Capo reparto, ingrandito e con aura), boomerang, effetti sonori e musica, playtesting/bilanciamento approfondito.
 
@@ -123,3 +123,12 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - Dopo la sconfitta: sprite della libreria **`giunti-damaged-v04.webp`** per 1,55 secondi, poi **`giunti-fire-v04.webp`** con fiamme cartoon per 3,2 secondi; infine compare la schermata di vittoria.
 - La telecamera inquadra la libreria durante il finale; **Riprova** ripristina l'edificio e il normale inseguimento della protagonista.
 - Per vedere le modifiche pubblicate, attendere il completamento della GitHub Action **Deploy Veronikill PWA** e, se necessario, ricaricare la PWA per aggiornare la cache.
+
+## HUD e potenziamenti v0.6 — leggibilità mobile
+
+- HUD riposizionata sui bordi: salute e XP in alto a sinistra, punteggio/pausa in alto a destra, progressione (oppure barra del boss) nell'area **centrale in alto**. Le scritte di boss e pickup ora appaiono come brevi notifiche nell'angolo, mentre gli XP si vedono sulla barra senza pop-up di uccisione.
+- Le armi e le statistiche sbloccate compaiono in badge compatti lungo il **bordo inferiore**, tra i joystick. Badge **MAX** quando la relativa abilità arriva al livello 5.
+- **Massimo livello 5** per missili, lame, cadenza di fuoco, movimento, difesa, vita massima (5 step da +20 HP), e mitra (iniziando dal livello 1: quattro aumenti del danno). I potenziamenti permanenti a livello massimo non compaiono più fra le scelte.
+- I pickup di **missili e lame**, quando la rispettiva arma raggiunge il massimo, non vengono più generati e quelli già a terra vengono rimossi. Le posizioni successive generano altri tipi di pickup: cura, scudo, caffè o munizioni.
+- La cura al level-up rimane riutilizzabile, perché non è un miglioramento permanente con livello. Se non esistono più opzioni disponibili, un level-up non apre un pannello vuoto.
+- Lo stato della PWA e la resa della HUD vanno verificati su un telefono in orizzontale dopo il deploy.
