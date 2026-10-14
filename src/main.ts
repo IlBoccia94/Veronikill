@@ -22,6 +22,7 @@ const scoreText = el<HTMLElement>('score');
 const progressBar = el<HTMLDivElement>('progress-bar');
 const loadout = el<HTMLDivElement>('loadout');
 const progressWidget = document.querySelector<HTMLElement>('.progress-track');
+const progressLabel = document.querySelector<HTMLElement>('.progress-track span');
 const xpBar = el<HTMLDivElement>('xp-bar');
 const xpNumber = el<HTMLSpanElement>('xp-number');
 const levelText = el<HTMLSpanElement>('player-level');
@@ -181,6 +182,7 @@ const scene = new GameScene({
     hpText.textContent = String(Math.round(data.hp));
     scoreText.textContent = String(data.score);
     progressBar.style.width = data.progress + '%';
+    if (progressLabel) progressLabel.textContent = 'LIBRERIA · ' + data.progress + '%';
     progressWidget?.classList.toggle('hidden', data.bossActive);
     bossHud.classList.toggle('hidden', !data.bossActive);
     if (data.bossActive) {
