@@ -1,31 +1,308 @@
-    switch (id) {
-      case 'rocket':
-        this.rocketLevel = Math.min(MAX_UPGRADE_LEVEL, this.rocketLevel + 1);
-        break;
-      case 'blades':
-        this.bladeLevel = Math.min(MAX_UPGRADE_LEVEL, this.bladeLevel + 1);
-        this.rebuildBlades();
-        break;
-      case 'damage':
-        this.damageRank++;
-        break;
-      case 'fire-rate':
-        this.fireRateRank++;
-        break;
-      case 'movement':
-        this.movementRank++;
-        break;
-      case 'max-health':
-        this.maxHP += 20;
-        this.health = Math.min(this.maxHP, this.health + 20);
-        break;
-      case 'armor':
-        this.armorRank++;
-        break;
-      case 'heal':
-        this.health = Math.min(this.maxHP, this.health + 40);
-        break;
+import Phaser from 'phaser';
+
+export type StickVector = { x: number; y: number };
+export type AimState = { active: boolean; angle: number };
+export type HUDState = {
+  hp: number; maxHP: number; score: number; kills: number; progress: number;
+  rocketLevel: number; bladeLevel: number; elapsed: number;
+  shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
+  bossActive: boolean; bossHP: number; bossMaxHP: number;
+  eventTitle: string; eventDetail: string; eventSeconds: number; eventFraction: number;
+  level: number; xp: number; xpNeeded: number;
+  damageRank: number; fireRateRank: number; movementRank: number; armorRank: number;
+};
+export type RunResult = { outcome: 'won' | 'lost'; score: number; kills: number; seconds: number };
+
+export type UpgradeId =
+  | 'rocket' | 'blades' | 'damage' | 'fire-rate'
+  | 'movement' | 'max-health' | 'armor' | 'heal';
+
+export interface UpgradeOption {
+  id: UpgradeId;
+  title: string;
+  description: string;
+  icon: string;
+  rarity: 'Arma' | 'Passivo' | 'Recupero';
+}
+
+export interface LevelUpChoice {
+  level: number;
+  options: UpgradeOption[];
+  title?: string; eyebrow?: string; help?: string;
+}
+
+
+export interface GamePorts {
+  move: () => StickVector;
+  aim: () => AimState;
+  onHUD: (hud: HUDState) => void;
+  onEnd: (result: RunResult) => void;
+  onLevelUp: (event: LevelUpChoice) => void;
+  onNotice: (message: string) => void;
+}
+
+type EnemyKind = 'commesso' | 'capo' | 'cliente' | 'responsabile';
+type Enemy = {
+  sprite: Phaser.GameObjects.Image;
+  kind: EnemyKind;
+  hp: number; speed: number; damage: number;
+  phase: number; cooldown: number; warning: number; charge: number;
+  lastBlade: number; dead: boolean;
+};
+type Shot = {
+  sprite: Phaser.GameObjects.Image; vx: number; vy: number; ttl: number;
+  power: number; owner: 'player' | 'enemy'; rocket: boolean; dead: boolean;
+};
+type LootKind = 'rocket' | 'blades' | 'heal' | 'shield' | 'coffee' | 'ammo';
+type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
+type Boss = {
+  sprite: Phaser.GameObjects.Image;
+  aura: Phaser.GameObjects.Arc;
+  hp: number; maxHP: number; lastBlade: number;
+  volleyTimer: number; ringTimer: number; dashTimer: number;
+  windup: number; dashLeft: number; dashX: number; dashY: number;
+};
+type BossPhase = 'travel' | 'combat' | 'damaged' | 'fire';
+type RandomEventKind = 'sale' | 'manager' | 'cart';
+type RandomEventState = {
+  kind: RandomEventKind; remaining: number; initial: number; spawnCooldown: number;
+  manager?: Enemy; managerMaxHP?: number; aura?: Phaser.GameObjects.Arc;
+  cart?: Phaser.GameObjects.Image;
+};
+
+const WIDTH = 960;
+const HEIGHT = 900;
+const FINISH_X = 25000;
+const MAX_UPGRADE_LEVEL = 5;
+const ROAD_TOP = 165;
+const ROAD_BOTTOM = 735;
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+}
+function randomBetween(min: number, max: number): number {
+  return Phaser.Math.Between(min, max);
+}
+
+export class GameScene extends Phaser.Scene {
+  private readonly ports: GamePorts;
+  private player!: Phaser.GameObjects.Image;
+  private playerScale = 0.97;
+  private playerRotationOffset = 0;
+  private playerShadow!: Phaser.GameObjects.Ellipse;
+  private enemies: Enemy[] = [];
+  private shots: Shot[] = [];
+  private loot: Loot[] = [];
+  private blades: Phaser.GameObjects.Image[] = [];
+  private keys?: Record<string, Phaser.Input.Keyboard.Key>;
+  private running = false;
+  private pausedRun = false;
+  private health = 100;
+  private score = 0;
+  private kills = 0;
+  private elapsed = 0;
+  private invincibleUntil = 0;
+  private aimAngle = 0;
+  private fireTimer = 0;
+  private spawnTimer = 1;
+  private missileTimer = 1.5;
+  private hudTimer = 0;
+  private nextLootX = 850;
+  private lootIndex = 0;
+  private rocketLevel = 0;
+  private bladeLevel = 0;
+  private bladeAngle = 0;
+  private shieldUntil = 0;
+  private speedUntil = 0;
+  private rapidUntil = 0;
+  private winTriggered = false;
+  private maxHP = 100;
+  private xp = 0;
+  private level = 1;
+  private awaitingUpgrade = false;
+  private offeredUpgrades: UpgradeOption[] = [];
+  private damageRank = 0;
+  private fireRateRank = 0;
+  private movementRank = 0;
+  private armorRank = 0;
+  private bossPhase: BossPhase = 'travel';
+  private boss?: Boss;
+  private bossWarning?: Phaser.GameObjects.Graphics;
+  private bookstore?: Phaser.GameObjects.Image;
+  private bookstoreWidth = 0;
+  private bookstoreHeight = 0;
+  private destructionTimer = 0;
+  private eventDeck: RandomEventKind[] = [];
+  private currentEvent?: RandomEventState;
+  private nextEventX = 2900;
+  private cartChoice = false;
+  private cartAmbush = false;
+
+  constructor(ports: GamePorts) {
+    super({ key: 'Game' });
+    this.ports = ports;
+  }
+
+  preload(): void {
+    const base = import.meta.env.BASE_URL;
+    this.load.image('veronica-art', base + 'veronica-topdown.webp');
+    this.load.image('street-art', base + 'assets/street/street-v04.webp');
+    for (const kind of ['commesso', 'capo', 'cliente', 'direttore']) {
+      // Versioned mob URLs prevent a previously installed PWA from reusing the old art.
+      const file = kind === 'commesso' || kind === 'capo' ? kind + '-v2.webp' : kind + '.webp';
+      this.load.image('enemy-' + kind, base + 'assets/enemies/' + file);
     }
+    for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
+      this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
+    }
+    for (const kind of ['giunti', 'giunti-damaged', 'giunti-fire']) {
+      this.load.image('bookstore-' + kind, base + 'assets/bookstore/' + kind + '-v04.webp');
+    }
+  }
+
+  create(): void {
+    this.makeTextures();
+    this.drawCity();
+    this.playerShadow = this.add.ellipse(170, 470, 43, 17, 0x0c0d16, 0.36).setDepth(10);
+    const artTexture = this.textures.exists('veronica-art') ? 'veronica-art' : 'veronica';
+    this.player = this.add.image(170, 450, artTexture).setDepth(22);
+    this.playerScale = artTexture === 'veronica-art' ? 86 / this.player.height : 0.97;
+    // The illustration's weapon points down-right; compensate when rotating to aim.
+    this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
+    this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
+    this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
+    // Fullscreen canvas with a closer, vertically scrolling view.
+    // The camera follows Veronica without altering her sprite scale.
+    this.fitCameraToViewport();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this));
+    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
+    this.cameras.main.roundPixels = true;
+    this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
+    this.emitHUD();
+  }
+
+  private fitCameraToViewport(): void {
+    const { width, height } = this.scale;
+    if (width <= 0 || height <= 0) return;
+    this.cameras.main.setViewport(0, 0, width, height);
+    // Before: height / 900 showed the entire road and made the mobs tiny.
+    // A 560-unit vertical view is ~1.6x closer and leaves room for true
+    // up/down camera tracking within the 900-unit world (no empty borders).
+    const visibleWorldHeight = 560;
+    this.cameras.main.setZoom(height / visibleWorldHeight);
+  }
+
+  startRun(): void {
+    this.destroyDynamic();
+    this.maxHP = 100;
+    this.health = this.maxHP;
+    this.level = 1;
+    this.xp = 0;
+    this.awaitingUpgrade = false;
+    this.offeredUpgrades = [];
+    this.damageRank = 0;
+    this.fireRateRank = 0;
+    this.movementRank = 0;
+    this.armorRank = 0;
+    this.score = 0;
+    this.kills = 0;
+    this.elapsed = 0;
+    this.invincibleUntil = 0;
+    this.aimAngle = 0;
+    this.fireTimer = 0.15;
+    this.spawnTimer = 1;
+    this.missileTimer = 2;
+    this.hudTimer = 0;
+    this.nextLootX = 820;
+    this.lootIndex = 0;
+    this.rocketLevel = 0;
+    this.bladeLevel = 0;
+    this.bladeAngle = 0;
+    this.shieldUntil = 0;
+    this.speedUntil = 0;
+    this.rapidUntil = 0;
+    this.winTriggered = false;
+    this.bossPhase = 'travel';
+    this.destructionTimer = 0;
+    this.eventDeck = [];
+    this.nextEventX = 2900;
+    this.cartChoice = false;
+    this.cartAmbush = false;
+    if (this.bookstore && this.textures.exists('bookstore-giunti')) {
+      this.bookstore.setTexture('bookstore-giunti')
+        .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight).clearTint().setAlpha(1);
+    }
+    this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
+    this.playerShadow.setPosition(170, 470);
+    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
+    this.cameras.main.centerOn(370, HEIGHT / 2);
+    this.running = true;
+    this.pausedRun = false;
+    this.emitHUD();
+  }
+
+  setPaused(value: boolean): void {
+    this.pausedRun = value;
+  }
+
+  get isPaused(): boolean { return this.pausedRun; }
+  get isRunning(): boolean { return this.running; }
+  get isChoosingUpgrade(): boolean { return this.awaitingUpgrade; }
+
+  // The XP remaining after a level-up is carried into the next level.
+  private xpNeeded(level = this.level): number {
+    return Math.round(40 + (level - 1) * 24 + Math.pow(level - 1, 1.35) * 5);
+  }
+
+  private availableUpgrades(): UpgradeOption[] {
+    const all: UpgradeOption[] = [
+      { id: 'rocket', title: 'Missili a ricerca', description: 'Sblocca o migliora i missili automatici.', icon: '🚀', rarity: 'Arma' },
+      { id: 'blades', title: 'Lame orbitanti', description: 'Più lame e più danni intorno a Veronica.', icon: '🔪', rarity: 'Arma' },
+      { id: 'damage', title: 'Proiettili rinforzati', description: '+4 danni per ogni colpo del mitra.', icon: '💥', rarity: 'Passivo' },
+      { id: 'fire-rate', title: 'Grilletto facile', description: '+12% velocità di fuoco permanente.', icon: '⚡', rarity: 'Passivo' },
+      { id: 'movement', title: 'Scarpe da corsa', description: '+7% velocità di movimento permanente.', icon: '👟', rarity: 'Passivo' },
+      { id: 'max-health', title: 'Copertina rigida', description: '+20 salute massima e recuperi 20 HP.', icon: '❤️', rarity: 'Passivo' },
+      { id: 'armor', title: 'Recensioni blindate', description: '-12% danni subiti (cumulabile).', icon: '🛡️', rarity: 'Passivo' },
+      { id: 'heal', title: 'Pausa ristoro', description: 'Recupera 40 punti salute subito.', icon: '☕', rarity: 'Recupero' }
+    ];
+    return all.filter(option => {
+      switch (option.id) {
+        case 'rocket': return this.rocketLevel < MAX_UPGRADE_LEVEL;
+        case 'blades': return this.bladeLevel < MAX_UPGRADE_LEVEL;
+        case 'damage': return this.damageRank < MAX_UPGRADE_LEVEL - 1; // Mitra starts at level 1.
+        case 'fire-rate': return this.fireRateRank < MAX_UPGRADE_LEVEL;
+        case 'movement': return this.movementRank < MAX_UPGRADE_LEVEL;
+        case 'max-health': return this.maxHP < 100 + MAX_UPGRADE_LEVEL * 20;
+        case 'armor': return this.armorRank < MAX_UPGRADE_LEVEL;
+        case 'heal': return this.health <= this.maxHP - 12;
+      }
+    });
+  }
+
+  private createLevelUpChoice(): void {
+    if (!this.running || this.awaitingUpgrade || this.xp < this.xpNeeded()) return;
+    const pool = this.availableUpgrades();
+    // Never pause at an empty upgrade panel after permanent upgrades are capped.
+    if (pool.length === 0) {
+      this.xp -= this.xpNeeded();
+      this.level += 1;
+      this.emitHUD();
+      return;
+    }
+    this.xp -= this.xpNeeded();
+    this.level += 1;
+    Phaser.Utils.Array.Shuffle(pool);
+    this.offeredUpgrades = pool.slice(0, 3);
+    this.awaitingUpgrade = true;
+    this.emitHUD();
+    this.ports.onLevelUp({ level: this.level, options: this.offeredUpgrades.map(option => ({ ...option })) });
+  }
+
+  chooseUpgrade(id: UpgradeId): boolean {
+    if (!this.running || !this.awaitingUpgrade || !this.offeredUpgrades.some(option => option.id === id)) return false;
+    if (!this.availableUpgrades().some(option => option.id === id)) return false;
     this.applyUpgrade(id);
     const fromCart = this.cartChoice;
     this.cartChoice = false;
