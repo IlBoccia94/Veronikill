@@ -4,7 +4,7 @@ Shooter arcade top-down progettato per telefono (landscape) e browser desktop. P
 
 ## Stato
 
-**Versione corrente v0.6**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta dei potenziamenti al level-up, HUD compatta sui bordi e miglioramenti fino al livello 5. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
+**Versione corrente v0.9**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta dei potenziamenti al level-up, HUD compatta sui bordi e miglioramenti fino al livello 5. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
 
 **Da aggiungere**: sprite illustrato specifico del Direttore (attualmente usa lo sprite del Capo reparto, ingrandito e con aura), boomerang, effetti sonori e musica, playtesting/bilanciamento approfondito.
 
@@ -146,3 +146,14 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - Il canvas resta fullscreen responsivo (niente bande laterali), ma la telecamera mostra circa **560 unità** verticali sulle 900 del mondo invece dell'intera mappa. Personaggi e pickup appaiono circa **1,6× più grandi** a parità di dimensione schermo.
 - La telecamera segue Veronica in **orizzontale e verticale**, rispettando sempre i confini del mondo e adattandosi al ridimensionamento del viewport.
 - I clienti pazzi ora lanciano **libri blu rotanti** (sprite Phaser disegnato a codice). I proiettili degli altri nemici e del Direttore rimangono invariati.
+
+
+## v0.9 — Eventi casuali (percorso principale)
+
+Tre eventi si alternano in ordine casuale **senza ripetizioni fino all'esaurimento del mazzo**. Il primo può attivarsi superate circa 2.900 unità, poi gli altri arrivano a intervalli di percorrenza dopo che il precedente si è concluso. Durante la boss fight gli eventi vengono interrotti e i relativi sprite ripuliti.
+
+- **🛍 Saldi al 90%** — dura 30 secondi di gioco effettivo, genera ondate di clienti pazzi e commesse da entrambi i lati. Resistere fino alla fine garantisce 220 punti. Non vengono generati altri nemici casuali in parallelo durante la sfida.
+- **👑 Arriva la Responsabile** — miniboss variante viola delle commesse, barra HP e attacchi di libri a ventaglio. La vittoria assegna XP, punti e un miglioramento gratuito scelto tra missili, lame, mitra e cadenza ancora potenziabili. Se la Responsabile fugge o scade il timer non dà il premio.
+- **🛒 Carrello delle offerte** — sprite interattivo sulla strada. Basta toccarlo per mettere in pausa il gioco e scegliere uno di massimo tre potenziamenti permanenti ancora disponibili, senza spendere XP. Il 40% delle volte, dopo la scelta, appare un'imboscata. Se tutti i potenziamenti sono massimi, il carrello offre cura/scudo.
+- **HUD** — indicatore evento piccolo in alto, con durata rimanente oppure salute del miniboss. Nessun banner centrale persistente e controlli invariati.
+- Lo stato degli eventi e le offerte sono azzerati in caso di vittoria, sconfitta o nuovo tentativo. Gli effetti temporanei e i potenziamenti rispettano il limite massimo già in vigore.
