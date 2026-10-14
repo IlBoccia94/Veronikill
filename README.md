@@ -139,3 +139,10 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - Giocando su browser Android, il pulsante Avvia prova anche a entrare in fullscreen tramite gesto dell'utente (best effort). La manifest della PWA installata richiede fullscreen, dove supportato dal sistema operativo; eventuali barre di sistema restano soggette ad Android.
 - Nuove URL versionate `enemies/commesso-v2.webp` e `enemies/capo-v2.webp`, per evitare il riuso delle immagini precedenti nella cache dell'app installata. Il Direttore mantiene il suo asset indipendente `enemies/direttore.webp`.
 - Messaggio di versione V0.7 nella schermata iniziale e nella HUD per riconoscere un'installazione aggiornata. Se il Service Worker si aggiorna durante una partita, il refresh viene differito.
+
+
+## v0.8 — Zoom della telecamera e libri-proiettile
+
+- Il canvas resta fullscreen responsivo (niente bande laterali), ma la telecamera mostra circa **560 unità** verticali sulle 900 del mondo invece dell'intera mappa. Personaggi e pickup appaiono circa **1,6× più grandi** a parità di dimensione schermo.
+- La telecamera segue Veronica in **orizzontale e verticale**, rispettando sempre i confini del mondo e adattandosi al ridimensionamento del viewport.
+- I clienti pazzi ora lanciano **libri blu rotanti** (sprite Phaser disegnato a codice). I proiettili degli altri nemici e del Direttore rimangono invariati.

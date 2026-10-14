@@ -158,13 +158,13 @@ export class GameScene extends Phaser.Scene {
     this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
     this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
     this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
-    // Camera is responsive: display the full 900-unit road vertically,
-    // and reveal more of the horizontal world on wide landscape phones.
+    // Fullscreen canvas with a closer, vertically scrolling view.
+    // The camera follows Veronica without altering her sprite scale.
     this.fitCameraToViewport();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this));
-    this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
+    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
     this.cameras.main.roundPixels = true;
     this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
     this.emitHUD();
@@ -174,7 +174,11 @@ export class GameScene extends Phaser.Scene {
     const { width, height } = this.scale;
     if (width <= 0 || height <= 0) return;
     this.cameras.main.setViewport(0, 0, width, height);
-    this.cameras.main.setZoom(height / HEIGHT);
+    // Before: height / 900 showed the entire road and made the mobs tiny.
+    // A 560-unit vertical view is ~1.6x closer and leaves room for true
+    // up/down camera tracking within the 900-unit world (no empty borders).
+    const visibleWorldHeight = 560;
+    this.cameras.main.setZoom(height / visibleWorldHeight);
   }
 
   startRun(): void {
@@ -215,7 +219,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
     this.playerShadow.setPosition(170, 470);
-    this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
+    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
     this.cameras.main.centerOn(370, HEIGHT / 2);
     this.running = true;
     this.pausedRun = false;
@@ -482,7 +486,7 @@ export class GameScene extends Phaser.Scene {
         if (enemy.cooldown < 0 && dist < 440 && this.shots.length < 135) {
           enemy.cooldown = randomBetween(20, 32) / 10;
           const angle = Math.atan2(dy, dx);
-          this.addShot(s.x, s.y, angle, 235, 12, 'enemy', false);
+          this.addShot(s.x, s.y, angle, 235, 12, 'enemy', false, 'book');
           s.setTint(0xf7cbff);
           this.time.delayedCall(160, () => { if (!enemy.dead && s.active) s.clearTint(); });
         }
@@ -541,6 +545,8 @@ export class GameScene extends Phaser.Scene {
       }
       shot.sprite.x += shot.vx * dt;
       shot.sprite.y += shot.vy * dt;
+      // The crazed customers throw spinning little books, not receipts.
+      if (shot.sprite.texture.key === 'book') shot.sprite.rotation += dt * 5.5;
 
       if (shot.owner === 'enemy') {
         if (distance(shot.sprite, this.player) < 27) {
@@ -804,8 +810,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private addShot(x: number, y: number, angle: number, speed: number, power: number, owner: 'player' | 'enemy', rocket: boolean): void {
-    const sprite = this.add.image(x, y, rocket ? 'rocket' : owner === 'enemy' ? 'receipt' : 'bullet')
+  private addShot(
+    x: number, y: number, angle: number, speed: number, power: number,
+    owner: 'player' | 'enemy', rocket: boolean, enemyProjectile: 'receipt' | 'book' = 'receipt'
+  ): void {
+    const texture = rocket ? 'rocket' : owner === 'enemy' ? enemyProjectile : 'bullet';
+    const sprite = this.add.image(x, y, texture)
       .setRotation(angle).setDepth(15);
     this.shots.push({
       sprite, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
@@ -1077,6 +1087,16 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(0xffa0bb); g.fillRoundedRect(0, 2, 25, 12, 2);
     g.fillStyle(0xf5d3e6); g.fillRect(7, 3, 11, 10);
     g.generateTexture('receipt', 25, 16); g.clear();
+
+    // Small hardback book projectile: blue cover, cream pages, gold bookmark.
+    // Drawn as a transparent Phaser texture so it stays crisp at mobile zoom.
+    g.fillStyle(0x22192b); g.fillRoundedRect(1, 1, 30, 25, 4);
+    g.fillStyle(0xf5e8d0); g.fillRoundedRect(5, 3, 24, 21, 3);
+    g.fillStyle(0x5b85c9); g.fillRoundedRect(2, 2, 25, 22, 3);
+    g.fillStyle(0x25426e); g.fillRect(6, 2, 4, 22);
+    g.lineStyle(2, 0xf8d17b); g.strokeRoundedRect(13, 7, 10, 10, 2);
+    g.fillStyle(0xf9d37d); g.fillRect(18, 4, 3, 6);
+    g.generateTexture('book', 32, 27); g.clear();
 
     g.fillStyle(0xd7f4a8); g.fillEllipse(16, 12, 30, 15);
     g.fillStyle(0x3b5254); g.fillRoundedRect(4, 8, 22, 10, 3);
