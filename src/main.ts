@@ -21,6 +21,7 @@ const hpText = el<HTMLSpanElement>('hp-text');
 const scoreText = el<HTMLElement>('score');
 const progressBar = el<HTMLDivElement>('progress-bar');
 const loadout = el<HTMLDivElement>('loadout');
+const progressWidget = document.querySelector<HTMLElement>('.progress-track');
 const xpBar = el<HTMLDivElement>('xp-bar');
 const xpNumber = el<HTMLSpanElement>('xp-number');
 const levelText = el<HTMLSpanElement>('player-level');
@@ -45,6 +46,44 @@ const bossCount = document.createElement('div');
 bossCount.className = 'boss-count';
 bossHud.append(bossHeading, bossTrack, bossCount);
 hud.append(bossHud);
+
+// Peripheral, short-lived notices. No floating world labels over Veronica or enemies.
+const notice = document.createElement('div');
+notice.className = 'hud-notice hidden';
+notice.setAttribute('role', 'status');
+notice.setAttribute('aria-live', 'polite');
+hud.append(notice);
+let noticeTimeout: number | undefined;
+let lastNotice = '';
+let lastNoticeAt = 0;
+function showNotice(message: string): void {
+  const now = Date.now();
+  if (message === lastNotice && now - lastNoticeAt < 1400) return;
+  lastNotice = message;
+  lastNoticeAt = now;
+  window.clearTimeout(noticeTimeout);
+  notice.textContent = message;
+  notice.classList.remove('hidden');
+  noticeTimeout = window.setTimeout(() => {
+    notice.classList.add('hidden');
+    notice.textContent = '';
+  }, 1500);
+}
+
+type LoadoutChip = { icon: string; name: string; rank?: number; temporary?: boolean };
+const MAX_WEAPON_LEVEL = 5;
+function renderLoadout(chips: LoadoutChip[]): void {
+  const nodes = chips.map(chip => {
+    const el = document.createElement('span');
+    const maxed = chip.rank === MAX_WEAPON_LEVEL;
+    el.className = 'loadout-chip' + (maxed ? ' maxed' : '') + (chip.temporary ? ' temporary' : '');
+    el.textContent = chip.icon + ' ' + chip.name +
+      (chip.rank !== undefined ? ' ' + (maxed ? 'MAX' : chip.rank + '/5') : '');
+    if (maxed) el.title = chip.name + ' - LIVELLO MASSIMO';
+    return el;
+  });
+  loadout.replaceChildren(...nodes);
+}
 
 class TouchStick {
   private readonly region: HTMLElement;
@@ -142,6 +181,7 @@ const scene = new GameScene({
     hpText.textContent = String(Math.round(data.hp));
     scoreText.textContent = String(data.score);
     progressBar.style.width = data.progress + '%';
+    progressWidget?.classList.toggle('hidden', data.bossActive);
     bossHud.classList.toggle('hidden', !data.bossActive);
     if (data.bossActive) {
       const fraction = Math.max(0, data.bossHP / Math.max(1, data.bossMaxHP));
@@ -152,17 +192,23 @@ const scene = new GameScene({
     xpBar.style.width = (100 * Math.min(data.xp, data.xpNeeded) / Math.max(1, data.xpNeeded)).toFixed(1) + '%';
     xpNumber.textContent = data.xp + ' / ' + data.xpNeeded + ' XP';
     levelText.textContent = 'LIV. ' + data.level;
-    const weapons = ['MITRA LV.' + (1 + data.damageRank)];
-    if (data.fireRateRank) weapons.push('⚡ CADENZA +' + data.fireRateRank);
-    if (data.movementRank) weapons.push('👟 VELOCITÀ +' + data.movementRank);
-    if (data.armorRank) weapons.push('🛡 DIFESA +' + data.armorRank);
-    if (data.rocketLevel) weapons.push('🚀 MISSILI LV.' + data.rocketLevel);
-    if (data.bladeLevel) weapons.push('✂ LAME LV.' + data.bladeLevel);
-    if (data.shieldSeconds) weapons.push('🛡 SCUDO ' + data.shieldSeconds + 's');
-    if (data.speedSeconds) weapons.push('☕ TURBO ' + data.speedSeconds + 's');
-    if (data.rapidSeconds) weapons.push('⚡ RAFFICA ' + data.rapidSeconds + 's');
-    loadout.textContent = weapons.join('   ·   ');
+    // Bottom-center inventory strip; never render a full line across the arena.
+    const chips: LoadoutChip[] = [
+      { icon: '🔫', name: 'MITRA', rank: 1 + data.damageRank }
+    ];
+    if (data.rocketLevel) chips.push({ icon: '🚀', name: 'MISSILI', rank: data.rocketLevel });
+    if (data.bladeLevel) chips.push({ icon: '✂', name: 'LAME', rank: data.bladeLevel });
+    if (data.fireRateRank) chips.push({ icon: '⚡', name: 'CADENZA', rank: data.fireRateRank });
+    if (data.movementRank) chips.push({ icon: '👟', name: 'CORSA', rank: data.movementRank });
+    if (data.armorRank) chips.push({ icon: '🛡', name: 'DIFESA', rank: data.armorRank });
+    const healthRank = Math.round((data.maxHP - 100) / 20);
+    if (healthRank) chips.push({ icon: '♥', name: 'VITA', rank: healthRank });
+    if (data.shieldSeconds) chips.push({ icon: '🛡', name: 'SCUDO ' + data.shieldSeconds + 's', temporary: true });
+    if (data.speedSeconds) chips.push({ icon: '☕', name: 'TURBO ' + data.speedSeconds + 's', temporary: true });
+    if (data.rapidSeconds) chips.push({ icon: '🔥', name: 'RAFFICA ' + data.rapidSeconds + 's', temporary: true });
+    renderLoadout(chips);
   },
+  onNotice: showNotice,
   onLevelUp: ({ level, options }: LevelUpChoice) => {
     mode = 'levelup';
     activeLevelOptions = options;
@@ -210,6 +256,8 @@ const scene = new GameScene({
       try { localStorage.setItem('veronikill-best-v1', String(best)); } catch { /* optional */ }
     }
     bossHud.classList.add('hidden');
+    notice.classList.add('hidden');
+    window.clearTimeout(noticeTimeout);
     title.textContent = result.outcome === 'won' ? 'MISSIONE COMPIUTA!' : 'FUORI CATALOGO!';
     copy.textContent = result.outcome === 'won'
       ? 'Direttore Generale sconfitto! La libreria è passata da integra a danneggiata e infine in fiamme. Veronica ha vinto la sua battaglia editoriale!'
@@ -247,6 +295,8 @@ const showHUD = (visible: boolean): void => {
   mobileControls.classList.toggle('hidden', !visible || !isTouch);
 };
 playBtn.addEventListener('click', () => {
+  notice.classList.add('hidden');
+  window.clearTimeout(noticeTimeout);
   levelUpPanel.classList.add('hidden');
   activeLevelOptions = [];
   if (mode === 'paused') {
