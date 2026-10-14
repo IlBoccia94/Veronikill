@@ -132,3 +132,10 @@ Il contenuto è una parodia videoludica e non è affiliato ad alcuna libreria o 
 - I pickup di **missili e lame**, quando la rispettiva arma raggiunge il massimo, non vengono più generati e quelli già a terra vengono rimossi. Le posizioni successive generano altri tipi di pickup: cura, scudo, caffè o munizioni.
 - La cura al level-up rimane riutilizzabile, perché non è un miglioramento permanente con livello. Se non esistono più opzioni disponibili, un level-up non apre un pannello vuoto.
 - Lo stato della PWA e la resa della HUD vanno verificati su un telefono in orizzontale dopo il deploy.
+
+## V0.7 — Area di gioco a piena larghezza e cache sprite
+
+- Il canvas Phaser usa `Scale.RESIZE` al posto di `Scale.FIT`, quindi occupa tutta l'area viewport disponibile anche su telefoni più larghi del 16:9. La telecamera mantiene l'altezza di mondo a 900 unità e mostra più mondo in orizzontale, senza deformare gli sprite.
+- Giocando su browser Android, il pulsante Avvia prova anche a entrare in fullscreen tramite gesto dell'utente (best effort). La manifest della PWA installata richiede fullscreen, dove supportato dal sistema operativo; eventuali barre di sistema restano soggette ad Android.
+- Nuove URL versionate `enemies/commesso-v2.webp` e `enemies/capo-v2.webp`, per evitare il riuso delle immagini precedenti nella cache dell'app installata. Il Direttore mantiene il suo asset indipendente `enemies/direttore.webp`.
+- Messaggio di versione V0.7 nella schermata iniziale e nella HUD per riconoscere un'installazione aggiornata. Se il Service Worker si aggiorna durante una partita, il refresh viene differito.

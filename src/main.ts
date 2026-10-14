@@ -270,15 +270,17 @@ const scene = new GameScene({
   }
 });
 
+// Use the *available* display viewport, not a fixed 16:9 letterboxed canvas.
+const gameHost = el<HTMLDivElement>('game');
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 960,
-  height: 540,
+  width: Math.max(1, gameHost.clientWidth),
+  height: Math.max(1, gameHost.clientHeight),
   backgroundColor: '#243044',
   antialias: true,
   render: { pixelArt: false },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.NO_CENTER },
   scene: [scene]
 });
 
@@ -297,6 +299,12 @@ const showHUD = (visible: boolean): void => {
   mobileControls.classList.toggle('hidden', !visible || !isTouch);
 };
 playBtn.addEventListener('click', () => {
+  // A tap/press is a valid fullscreen user gesture on supporting Android browsers.
+  // Standalone PWAs can reject the request; gameplay must continue regardless.
+  if (isTouch && !document.fullscreenElement && document.fullscreenEnabled) {
+    void document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      .catch(() => { /* unsupported or blocked by the hosting browser */ });
+  }
   notice.classList.add('hidden');
   window.clearTimeout(noticeTimeout);
   levelUpPanel.classList.add('hidden');
@@ -355,11 +363,22 @@ showHUD(false);
 if ('serviceWorker' in navigator) {
   const wasControlled = Boolean(navigator.serviceWorker.controller);
   let refreshing = false;
+  let refreshOnNextStart = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!wasControlled || refreshing || mode !== 'start') return;
+    if (!wasControlled || refreshing) return;
+    if (mode !== 'start') {
+      refreshOnNextStart = true; // Don't interrupt a run or the boss fight.
+      return;
+    }
     refreshing = true;
     window.location.reload();
   });
+  // Runs that remain open during an update refresh when the user starts again.
+  playBtn.addEventListener('click', () => {
+    if (!refreshOnNextStart || refreshing || mode !== 'result') return;
+    refreshing = true;
+    window.location.reload();
+  }, { capture: true });
   const checkForUpdate = (): void => {
     navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
       .then(registration => registration?.update())

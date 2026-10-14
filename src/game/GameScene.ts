@@ -135,7 +135,9 @@ export class GameScene extends Phaser.Scene {
     this.load.image('veronica-art', base + 'veronica-topdown.webp');
     this.load.image('street-art', base + 'assets/street/street-v04.webp');
     for (const kind of ['commesso', 'capo', 'cliente', 'direttore']) {
-      this.load.image('enemy-' + kind, base + 'assets/enemies/' + kind + '.webp');
+      // Versioned mob URLs prevent a previously installed PWA from reusing the old art.
+      const file = kind === 'commesso' || kind === 'capo' ? kind + '-v2.webp' : kind + '.webp';
+      this.load.image('enemy-' + kind, base + 'assets/enemies/' + file);
     }
     for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
       this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
@@ -156,13 +158,23 @@ export class GameScene extends Phaser.Scene {
     this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
     this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
     this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
-    // The old 1:1 camera cropped BOTH sidewalks from the visible 540px view
-    // into a 900px world; zooming out exposes the new road geometry immediately.
-    this.cameras.main.setZoom(0.74);
+    // Camera is responsive: display the full 900-unit road vertically,
+    // and reveal more of the horizontal world on wide landscape phones.
+    this.fitCameraToViewport();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this));
     this.cameras.main.startFollow(this.player, true, 0.09, 0.12, -140, 0);
     this.cameras.main.roundPixels = true;
     this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
     this.emitHUD();
+  }
+
+  private fitCameraToViewport(): void {
+    const { width, height } = this.scale;
+    if (width <= 0 || height <= 0) return;
+    this.cameras.main.setViewport(0, 0, width, height);
+    this.cameras.main.setZoom(height / HEIGHT);
   }
 
   startRun(): void {
@@ -816,7 +828,8 @@ export class GameScene extends Phaser.Scene {
     const texture = this.textures.exists('enemy-' + kind) ? 'enemy-' + kind : spec.texture;
     const sprite = this.add.image(x, y, texture).setDepth(18);
     if (texture !== spec.texture) {
-      const width = kind === 'capo' ? 84 : 70;
+      // Keep both updated illustrations legible without changing collision gameplay.
+      const width = kind === 'capo' ? 98 : kind === 'commesso' ? 82 : 70;
       sprite.setScale(width / sprite.width);
     }
     this.enemies.push({
