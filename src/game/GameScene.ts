@@ -1,291 +1,3 @@
-import Phaser from 'phaser';
-
-export type StickVector = { x: number; y: number };
-export type AimState = { active: boolean; angle: number };
-export type HUDState = {
-  hp: number; maxHP: number; score: number; kills: number; progress: number;
-  rocketLevel: number; bladeLevel: number; elapsed: number;
-  shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
-  bossActive: boolean; bossHP: number; bossMaxHP: number;
-  level: number; xp: number; xpNeeded: number;
-  damageRank: number; fireRateRank: number; movementRank: number; armorRank: number;
-};
-export type RunResult = { outcome: 'won' | 'lost'; score: number; kills: number; seconds: number };
-
-export type UpgradeId =
-  | 'rocket' | 'blades' | 'damage' | 'fire-rate'
-  | 'movement' | 'max-health' | 'armor' | 'heal';
-
-export interface UpgradeOption {
-  id: UpgradeId;
-  title: string;
-  description: string;
-  icon: string;
-  rarity: 'Arma' | 'Passivo' | 'Recupero';
-}
-
-export interface LevelUpChoice {
-  level: number;
-  options: UpgradeOption[];
-}
-
-
-export interface GamePorts {
-  move: () => StickVector;
-  aim: () => AimState;
-  onHUD: (hud: HUDState) => void;
-  onEnd: (result: RunResult) => void;
-  onLevelUp: (event: LevelUpChoice) => void;
-  onNotice: (message: string) => void;
-}
-
-type EnemyKind = 'commesso' | 'capo' | 'cliente';
-type Enemy = {
-  sprite: Phaser.GameObjects.Image;
-  kind: EnemyKind;
-  hp: number; speed: number; damage: number;
-  phase: number; cooldown: number; warning: number; charge: number;
-  lastBlade: number; dead: boolean;
-};
-type Shot = {
-  sprite: Phaser.GameObjects.Image; vx: number; vy: number; ttl: number;
-  power: number; owner: 'player' | 'enemy'; rocket: boolean; dead: boolean;
-};
-type LootKind = 'rocket' | 'blades' | 'heal' | 'shield' | 'coffee' | 'ammo';
-type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
-type Boss = {
-  sprite: Phaser.GameObjects.Image;
-  aura: Phaser.GameObjects.Arc;
-  hp: number; maxHP: number; lastBlade: number;
-  volleyTimer: number; ringTimer: number; dashTimer: number;
-  windup: number; dashLeft: number; dashX: number; dashY: number;
-};
-type BossPhase = 'travel' | 'combat' | 'damaged' | 'fire';
-
-const WIDTH = 960;
-const HEIGHT = 900;
-const FINISH_X = 25000;
-const MAX_UPGRADE_LEVEL = 5;
-const ROAD_TOP = 165;
-const ROAD_BOTTOM = 735;
-
-function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
-  return Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-}
-function randomBetween(min: number, max: number): number {
-  return Phaser.Math.Between(min, max);
-}
-
-export class GameScene extends Phaser.Scene {
-  private readonly ports: GamePorts;
-  private player!: Phaser.GameObjects.Image;
-  private playerScale = 0.97;
-  private playerRotationOffset = 0;
-  private playerShadow!: Phaser.GameObjects.Ellipse;
-  private enemies: Enemy[] = [];
-  private shots: Shot[] = [];
-  private loot: Loot[] = [];
-  private blades: Phaser.GameObjects.Image[] = [];
-  private keys?: Record<string, Phaser.Input.Keyboard.Key>;
-  private running = false;
-  private pausedRun = false;
-  private health = 100;
-  private score = 0;
-  private kills = 0;
-  private elapsed = 0;
-  private invincibleUntil = 0;
-  private aimAngle = 0;
-  private fireTimer = 0;
-  private spawnTimer = 1;
-  private missileTimer = 1.5;
-  private hudTimer = 0;
-  private nextLootX = 850;
-  private lootIndex = 0;
-  private rocketLevel = 0;
-  private bladeLevel = 0;
-  private bladeAngle = 0;
-  private shieldUntil = 0;
-  private speedUntil = 0;
-  private rapidUntil = 0;
-  private winTriggered = false;
-  private maxHP = 100;
-  private xp = 0;
-  private level = 1;
-  private awaitingUpgrade = false;
-  private offeredUpgrades: UpgradeOption[] = [];
-  private damageRank = 0;
-  private fireRateRank = 0;
-  private movementRank = 0;
-  private armorRank = 0;
-  private bossPhase: BossPhase = 'travel';
-  private boss?: Boss;
-  private bossWarning?: Phaser.GameObjects.Graphics;
-  private bookstore?: Phaser.GameObjects.Image;
-  private bookstoreWidth = 0;
-  private bookstoreHeight = 0;
-  private destructionTimer = 0;
-
-  constructor(ports: GamePorts) {
-    super({ key: 'Game' });
-    this.ports = ports;
-  }
-
-  preload(): void {
-    const base = import.meta.env.BASE_URL;
-    this.load.image('veronica-art', base + 'veronica-topdown.webp');
-    this.load.image('street-art', base + 'assets/street/street-v04.webp');
-    for (const kind of ['commesso', 'capo', 'cliente', 'direttore']) {
-      // Versioned mob URLs prevent a previously installed PWA from reusing the old art.
-      const file = kind === 'commesso' || kind === 'capo' ? kind + '-v2.webp' : kind + '.webp';
-      this.load.image('enemy-' + kind, base + 'assets/enemies/' + file);
-    }
-    for (const kind of ['mitra', 'missile', 'lame', 'cura', 'scudo', 'caffe', 'munizioni']) {
-      this.load.image('item-' + kind, base + 'assets/items/' + kind + '.webp');
-    }
-    for (const kind of ['giunti', 'giunti-damaged', 'giunti-fire']) {
-      this.load.image('bookstore-' + kind, base + 'assets/bookstore/' + kind + '-v04.webp');
-    }
-  }
-
-  create(): void {
-    this.makeTextures();
-    this.drawCity();
-    this.playerShadow = this.add.ellipse(170, 470, 43, 17, 0x0c0d16, 0.36).setDepth(10);
-    const artTexture = this.textures.exists('veronica-art') ? 'veronica-art' : 'veronica';
-    this.player = this.add.image(170, 450, artTexture).setDepth(22);
-    this.playerScale = artTexture === 'veronica-art' ? 86 / this.player.height : 0.97;
-    // The illustration's weapon points down-right; compensate when rotating to aim.
-    this.playerRotationOffset = artTexture === 'veronica-art' ? -0.70 : 0;
-    this.player.setScale(this.playerScale).setRotation(this.playerRotationOffset);
-    this.cameras.main.setBounds(0, 0, FINISH_X + 800, HEIGHT);
-    // Fullscreen canvas with a closer, vertically scrolling view.
-    // The camera follows Veronica without altering her sprite scale.
-    this.fitCameraToViewport();
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
-      this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCameraToViewport, this));
-    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
-    this.cameras.main.roundPixels = true;
-    this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
-    this.emitHUD();
-  }
-
-  private fitCameraToViewport(): void {
-    const { width, height } = this.scale;
-    if (width <= 0 || height <= 0) return;
-    this.cameras.main.setViewport(0, 0, width, height);
-    // Before: height / 900 showed the entire road and made the mobs tiny.
-    // A 560-unit vertical view is ~1.6x closer and leaves room for true
-    // up/down camera tracking within the 900-unit world (no empty borders).
-    const visibleWorldHeight = 560;
-    this.cameras.main.setZoom(height / visibleWorldHeight);
-  }
-
-  startRun(): void {
-    this.destroyDynamic();
-    this.maxHP = 100;
-    this.health = this.maxHP;
-    this.level = 1;
-    this.xp = 0;
-    this.awaitingUpgrade = false;
-    this.offeredUpgrades = [];
-    this.damageRank = 0;
-    this.fireRateRank = 0;
-    this.movementRank = 0;
-    this.armorRank = 0;
-    this.score = 0;
-    this.kills = 0;
-    this.elapsed = 0;
-    this.invincibleUntil = 0;
-    this.aimAngle = 0;
-    this.fireTimer = 0.15;
-    this.spawnTimer = 1;
-    this.missileTimer = 2;
-    this.hudTimer = 0;
-    this.nextLootX = 820;
-    this.lootIndex = 0;
-    this.rocketLevel = 0;
-    this.bladeLevel = 0;
-    this.bladeAngle = 0;
-    this.shieldUntil = 0;
-    this.speedUntil = 0;
-    this.rapidUntil = 0;
-    this.winTriggered = false;
-    this.bossPhase = 'travel';
-    this.destructionTimer = 0;
-    if (this.bookstore && this.textures.exists('bookstore-giunti')) {
-      this.bookstore.setTexture('bookstore-giunti')
-        .setDisplaySize(this.bookstoreWidth, this.bookstoreHeight).clearTint().setAlpha(1);
-    }
-    this.player.setPosition(170, 450).setRotation(this.playerRotationOffset).clearTint().setScale(this.playerScale);
-    this.playerShadow.setPosition(170, 470);
-    this.cameras.main.startFollow(this.player, true, 0.10, 0.17, -140, 0);
-    this.cameras.main.centerOn(370, HEIGHT / 2);
-    this.running = true;
-    this.pausedRun = false;
-    this.emitHUD();
-  }
-
-  setPaused(value: boolean): void {
-    this.pausedRun = value;
-  }
-
-  get isPaused(): boolean { return this.pausedRun; }
-  get isRunning(): boolean { return this.running; }
-  get isChoosingUpgrade(): boolean { return this.awaitingUpgrade; }
-
-  // The XP remaining after a level-up is carried into the next level.
-  private xpNeeded(level = this.level): number {
-    return Math.round(40 + (level - 1) * 24 + Math.pow(level - 1, 1.35) * 5);
-  }
-
-  private availableUpgrades(): UpgradeOption[] {
-    const all: UpgradeOption[] = [
-      { id: 'rocket', title: 'Missili a ricerca', description: 'Sblocca o migliora i missili automatici.', icon: '🚀', rarity: 'Arma' },
-      { id: 'blades', title: 'Lame orbitanti', description: 'Più lame e più danni intorno a Veronica.', icon: '🔪', rarity: 'Arma' },
-      { id: 'damage', title: 'Proiettili rinforzati', description: '+4 danni per ogni colpo del mitra.', icon: '💥', rarity: 'Passivo' },
-      { id: 'fire-rate', title: 'Grilletto facile', description: '+12% velocità di fuoco permanente.', icon: '⚡', rarity: 'Passivo' },
-      { id: 'movement', title: 'Scarpe da corsa', description: '+7% velocità di movimento permanente.', icon: '👟', rarity: 'Passivo' },
-      { id: 'max-health', title: 'Copertina rigida', description: '+20 salute massima e recuperi 20 HP.', icon: '❤️', rarity: 'Passivo' },
-      { id: 'armor', title: 'Recensioni blindate', description: '-12% danni subiti (cumulabile).', icon: '🛡️', rarity: 'Passivo' },
-      { id: 'heal', title: 'Pausa ristoro', description: 'Recupera 40 punti salute subito.', icon: '☕', rarity: 'Recupero' }
-    ];
-    return all.filter(option => {
-      switch (option.id) {
-        case 'rocket': return this.rocketLevel < MAX_UPGRADE_LEVEL;
-        case 'blades': return this.bladeLevel < MAX_UPGRADE_LEVEL;
-        case 'damage': return this.damageRank < MAX_UPGRADE_LEVEL - 1; // Mitra starts at level 1.
-        case 'fire-rate': return this.fireRateRank < MAX_UPGRADE_LEVEL;
-        case 'movement': return this.movementRank < MAX_UPGRADE_LEVEL;
-        case 'max-health': return this.maxHP < 100 + MAX_UPGRADE_LEVEL * 20;
-        case 'armor': return this.armorRank < MAX_UPGRADE_LEVEL;
-        case 'heal': return this.health <= this.maxHP - 12;
-      }
-    });
-  }
-
-  private createLevelUpChoice(): void {
-    if (!this.running || this.awaitingUpgrade || this.xp < this.xpNeeded()) return;
-    const pool = this.availableUpgrades();
-    // Never pause at an empty upgrade panel after permanent upgrades are capped.
-    if (pool.length === 0) {
-      this.xp -= this.xpNeeded();
-      this.level += 1;
-      this.emitHUD();
-      return;
-    }
-    this.xp -= this.xpNeeded();
-    this.level += 1;
-    Phaser.Utils.Array.Shuffle(pool);
-    this.offeredUpgrades = pool.slice(0, 3);
-    this.awaitingUpgrade = true;
-    this.emitHUD();
-    this.ports.onLevelUp({ level: this.level, options: this.offeredUpgrades.map(option => ({ ...option })) });
-  }
-
-  chooseUpgrade(id: UpgradeId): boolean {
-    if (!this.running || !this.awaitingUpgrade || !this.offeredUpgrades.some(option => option.id === id)) return false;
-    if (!this.availableUpgrades().some(option => option.id === id)) return false;
     switch (id) {
       case 'rocket':
         this.rocketLevel = Math.min(MAX_UPGRADE_LEVEL, this.rocketLevel + 1);
@@ -314,13 +26,57 @@ export class GameScene extends Phaser.Scene {
         this.health = Math.min(this.maxHP, this.health + 40);
         break;
     }
+    this.applyUpgrade(id);
+    const fromCart = this.cartChoice;
+    this.cartChoice = false;
     this.awaitingUpgrade = false;
     this.offeredUpgrades = [];
     this.removeMaxedLoot();
+    if (fromCart) {
+      if (this.cartAmbush) {
+        this.spawnCartAmbush();
+        this.ports.onNotice('⚠ OFFERTA TRAPPOLA! IMBOSCATA!');
+      } else {
+        this.ports.onNotice('🛒 AFFARE FATTO! BONUS OTTENUTO');
+      }
+      this.cartAmbush = false;
+      this.endRandomEvent();
+    }
     this.emitHUD();
     // Multiple levels gained from a single high-XP event are handled in sequence.
     this.createLevelUpChoice();
     return true;
+  }
+
+  private applyUpgrade(id: UpgradeId): void {
+    switch (id) {
+      case 'rocket':
+        this.rocketLevel = Math.min(MAX_UPGRADE_LEVEL, this.rocketLevel + 1);
+        break;
+      case 'blades':
+        this.bladeLevel = Math.min(MAX_UPGRADE_LEVEL, this.bladeLevel + 1);
+        this.rebuildBlades();
+        break;
+      case 'damage':
+        this.damageRank++;
+        break;
+      case 'fire-rate':
+        this.fireRateRank++;
+        break;
+      case 'movement':
+        this.movementRank++;
+        break;
+      case 'max-health':
+        this.maxHP += 20;
+        this.health = Math.min(this.maxHP, this.health + 20);
+        break;
+      case 'armor':
+        this.armorRank++;
+        break;
+      case 'heal':
+        this.health = Math.min(this.maxHP, this.health + 40);
+        break;
+    }
   }
 
   private awardXP(points: number): void {
@@ -342,6 +98,8 @@ export class GameScene extends Phaser.Scene {
 
     this.updatePlayer(dt);
     if (this.bossPhase === 'travel' && this.player.x >= FINISH_X - 560) this.startBossFight();
+    if (this.bossPhase === 'travel') this.updateRandomEvent(dt);
+    if (this.awaitingUpgrade) return; // The cart reward uses the same paused choice UI.
     this.updateWeapons(dt);
     if (this.bossPhase === 'travel') this.updateEnemies(dt);
     if (this.bossPhase === 'combat') this.updateBoss(dt);
@@ -445,7 +203,8 @@ export class GameScene extends Phaser.Scene {
   private updateEnemies(dt: number): void {
     this.spawnTimer -= dt;
     const progress = this.player.x / FINISH_X;
-    if (this.spawnTimer <= 0 && progress < 0.95) {
+    if (this.spawnTimer <= 0 && progress < 0.95
+      && this.currentEvent?.kind !== 'sale' && this.currentEvent?.kind !== 'manager') {
       this.spawnTimer = Math.max(0.48, 1.54 - progress * 0.82);
       if (this.enemies.length < 28) this.spawnEnemy(progress);
     }
@@ -472,6 +231,19 @@ export class GameScene extends Phaser.Scene {
             enemy.cooldown = 4.2;
           }
         }
+      }
+
+      if (enemy.kind === 'responsabile') {
+        enemy.cooldown -= dt;
+        if (enemy.cooldown <= 0 && dist < 590 && this.shots.length < 120) {
+          enemy.cooldown = 1.55;
+          const angle = Math.atan2(dy, dx);
+          for (let i = -1; i <= 1; i++) {
+            this.addShot(s.x, s.y, angle + i * 0.21, 255, 13, 'enemy', false, 'book');
+          }
+        }
+        this.currentEvent?.aura?.setPosition(s.x, s.y);
+        s.setFlipX(dx < 0);
       }
 
       if (enemy.kind === 'cliente') {
@@ -504,7 +276,7 @@ export class GameScene extends Phaser.Scene {
         s.rotation = Math.atan2(dy, dx);
       }
 
-      if (dist < (enemy.kind === 'capo' ? 44 : 34)) {
+      if (dist < (enemy.kind === 'responsabile' ? 57 : enemy.kind === 'capo' ? 44 : 34)) {
         this.hurtPlayer(enemy.damage, dx, dy);
       }
       if (s.x < this.player.x - 1030 || s.x > this.player.x + 1500) {
@@ -522,6 +294,157 @@ export class GameScene extends Phaser.Scene {
       this.lootIndex++;
       this.nextLootX += 1100;
     }
+  }
+
+
+  // Three distinct events are dealt in a shuffled deck before repeating.
+  private drawRandomEvent(): RandomEventKind {
+    if (this.eventDeck.length === 0) {
+      this.eventDeck = Phaser.Utils.Array.Shuffle(['sale', 'manager', 'cart'] as RandomEventKind[]);
+    }
+    return this.eventDeck.pop()!;
+  }
+
+  private startRandomEvent(): void {
+    const kind = this.drawRandomEvent();
+    const seconds = kind === 'sale' ? 30 : kind === 'manager' ? 26 : 22;
+    const state: RandomEventState = { kind, remaining: seconds, initial: seconds, spawnCooldown: 0 };
+    this.currentEvent = state;
+    if (kind === 'sale') {
+      this.ports.onNotice('🛍 SALDI AL 90%! 30 SECONDI DI FOLLIA!');
+    } else if (kind === 'manager') {
+      const x = Math.min(FINISH_X - 900, this.player.x + 385);
+      const y = Phaser.Math.Clamp(this.player.y + randomBetween(-130, 130), ROAD_TOP + 95, ROAD_BOTTOM - 95);
+      const manager = this.spawnEnemy(this.player.x / FINISH_X, 'responsabile', x, y);
+      state.manager = manager;
+      state.managerMaxHP = manager.hp;
+      state.aura = this.add.circle(x, y, 78, 0xb56aff, 0.22)
+        .setStrokeStyle(5, 0xffd279, 0.8).setDepth(17);
+      this.ports.onNotice('👑 ARRIVA LA RESPONSABILE! PREMIO RARO!');
+    } else {
+      const x = Math.min(FINISH_X - 900, this.player.x + 330);
+      const y = Phaser.Math.Clamp(this.player.y + randomBetween(-145, 145), ROAD_TOP + 95, ROAD_BOTTOM - 95);
+      state.cart = this.add.image(x, y, 'offer-cart').setDepth(12).setScale(1.1);
+      this.ports.onNotice('🛒 CARRELLO DELLE OFFERTE! RACCOGLILO!');
+    }
+    this.emitHUD();
+  }
+
+  private updateRandomEvent(dt: number): void {
+    if (!this.currentEvent) {
+      if (this.player.x >= this.nextEventX && this.player.x < FINISH_X - 2600) {
+        this.startRandomEvent();
+      }
+      return;
+    }
+    const event = this.currentEvent;
+    event.remaining -= dt;
+    if (event.kind === 'sale') {
+      event.spawnCooldown -= dt;
+      if (event.spawnCooldown <= 0 && this.enemies.length < 30) {
+        event.spawnCooldown = 1.45;
+        for (let i = 0; i < 3 && this.enemies.length < 30; i++) {
+          const kind: EnemyKind = i === 2 ? 'commesso' : 'cliente';
+          const spawnY = i % 2 ? ROAD_TOP + 20 : ROAD_BOTTOM - 20;
+          const spawnX = Math.min(FINISH_X - 200, this.player.x + randomBetween(320, 670));
+          this.spawnEnemy(this.player.x / FINISH_X, kind, spawnX, spawnY);
+        }
+      }
+      if (event.remaining <= 0) {
+        this.score += 220;
+        this.ports.onNotice('🎉 SALDI TERMINATI! +220 PUNTI');
+        this.endRandomEvent();
+      }
+    } else if (event.kind === 'manager') {
+      const manager = event.manager;
+      if (!manager || manager.dead) return;
+      // If the player escapes, the manager retreats; bonus only for defeating her.
+      if (event.remaining <= 0 || manager.sprite.x < this.player.x - 950) {
+        this.ports.onNotice('LA RESPONSABILE È SCAPPATA!');
+        this.endRandomEvent();
+      }
+    } else {
+      const cart = event.cart;
+      if (cart && cart.active) {
+        cart.rotation = Math.sin(this.elapsed * 2) * 0.07;
+        if (distance(cart, this.player) <= 65) {
+          cart.destroy();
+          event.cart = undefined;
+          this.openCartRewards();
+          return;
+        }
+      }
+      if (event.remaining <= 0 || (cart && cart.x < this.player.x - 600)) {
+        this.ports.onNotice('IL CARRELLO È SCOMPARSO');
+        this.endRandomEvent();
+      }
+    }
+  }
+
+  private openCartRewards(): void {
+    const upgrades = this.availableUpgrades();
+    const permanent = upgrades.filter(option => option.id !== 'heal');
+    const pool = permanent.length ? permanent : upgrades;
+    Phaser.Utils.Array.Shuffle(pool);
+    this.offeredUpgrades = pool.slice(0, 3);
+    if (this.offeredUpgrades.length === 0) {
+      this.health = Math.min(this.maxHP, this.health + 40);
+      this.shieldUntil = Math.max(this.shieldUntil, this.elapsed) + 8;
+      this.ports.onNotice('🛒 TUTTO MAX! +40 HP E SCUDO');
+      this.endRandomEvent();
+      return;
+    }
+    this.cartAmbush = Math.random() < 0.4;
+    this.cartChoice = true;
+    this.awaitingUpgrade = true;
+    this.ports.onLevelUp({
+      level: this.level,
+      eyebrow: 'CARRELLO DELLE OFFERTE',
+      title: 'SCEGLI IL TUO AFFARE!',
+      help: 'Un potenziamento gratis. Ma occhio alle offerte troppo belle...',
+      options: this.offeredUpgrades.map(option => ({ ...option }))
+    });
+    this.emitHUD();
+  }
+
+  private spawnCartAmbush(): void {
+    const count = 6;
+    for (let i = 0; i < count && this.enemies.length < 32; i++) {
+      const kind: EnemyKind = i % 3 === 0 ? 'capo' : i % 2 ? 'cliente' : 'commesso';
+      const x = Phaser.Math.Clamp(this.player.x + randomBetween(245, 570), 95, FINISH_X - 120);
+      const y = i % 2 === 0 ? ROAD_TOP + randomBetween(20, 115) : ROAD_BOTTOM - randomBetween(20, 115);
+      this.spawnEnemy(this.player.x / FINISH_X, kind, x, y);
+    }
+  }
+
+  private grantRareReward(): void {
+    const candidates = this.availableUpgrades().filter(opt =>
+      opt.id === 'rocket' || opt.id === 'blades' || opt.id === 'damage' || opt.id === 'fire-rate');
+    if (candidates.length) {
+      const selected = Phaser.Utils.Array.GetRandom(candidates);
+      this.applyUpgrade(selected.id);
+      this.removeMaxedLoot();
+    } else {
+      this.health = Math.min(this.maxHP, this.health + 45);
+      this.shieldUntil = Math.max(this.shieldUntil, this.elapsed) + 10;
+    }
+    this.emitHUD();
+  }
+
+  private endRandomEvent(scheduleNext = true): void {
+    const event = this.currentEvent;
+    if (!event) return;
+    event.cart?.destroy();
+    event.aura?.destroy();
+    if (event.manager && !event.manager.dead) {
+      event.manager.dead = true;
+      if (event.manager.sprite.active) event.manager.sprite.destroy();
+    }
+    this.currentEvent = undefined;
+    this.cartChoice = false;
+    this.cartAmbush = false;
+    if (scheduleNext) this.nextEventX = this.player.x + randomBetween(2300, 3400);
+    this.emitHUD();
   }
 
   private updateShots(dt: number): void {
@@ -587,6 +510,7 @@ export class GameScene extends Phaser.Scene {
 
   private startBossFight(): void {
     if (this.bossPhase !== 'travel') return;
+    this.endRandomEvent(false);
     this.bossPhase = 'combat';
     // Clear stray foes and their shots: the encounter is readable on a phone.
     for (const enemy of this.enemies) if (enemy.sprite.active) enemy.sprite.destroy();
@@ -823,29 +747,35 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private spawnEnemy(progress: number): void {
+  private spawnEnemy(progress: number, forced?: EnemyKind, atX?: number, atY?: number): Enemy {
     const roll = Math.random();
-    const kind: EnemyKind =
-      progress > 0.36 && roll < 0.23 ? 'capo' :
-      progress > 0.18 && roll < 0.55 ? 'cliente' : 'commesso';
-    const y = Math.random() < 0.5 ? ROAD_TOP + 15 : ROAD_BOTTOM - 15;
-    const x = Math.min(FINISH_X - 160, this.player.x + randomBetween(390, 710));
+    const kind: EnemyKind = forced ??
+      (progress > 0.36 && roll < 0.23 ? 'capo' :
+      progress > 0.18 && roll < 0.55 ? 'cliente' : 'commesso');
+    const y = atY ?? (Math.random() < 0.5 ? ROAD_TOP + 15 : ROAD_BOTTOM - 15);
+    const x = atX ?? Math.min(FINISH_X - 160, this.player.x + randomBetween(390, 710));
     const spec = {
       commesso: { hp: 38, speed: 112, damage: 9, texture: 'commesso' },
       capo: { hp: 132, speed: 72, damage: 17, texture: 'capo' },
-      cliente: { hp: 57, speed: 91, damage: 11, texture: 'cliente' }
+      cliente: { hp: 57, speed: 91, damage: 11, texture: 'cliente' },
+      responsabile: { hp: 510 + this.level * 35, speed: 185, damage: 20, texture: 'commesso' }
     }[kind];
-    const texture = this.textures.exists('enemy-' + kind) ? 'enemy-' + kind : spec.texture;
+    const textureKey = kind === 'responsabile' ? 'enemy-commesso' : 'enemy-' + kind;
+    const texture = this.textures.exists(textureKey) ? textureKey : spec.texture;
     const sprite = this.add.image(x, y, texture).setDepth(18);
     if (texture !== spec.texture) {
-      // Keep both updated illustrations legible without changing collision gameplay.
-      const width = kind === 'capo' ? 98 : kind === 'commesso' ? 82 : 70;
+      const width = kind === 'responsabile' ? 132 : kind === 'capo' ? 98 : kind === 'commesso' ? 82 : 70;
       sprite.setScale(width / sprite.width);
     }
-    this.enemies.push({
-      sprite, kind, hp: Math.round(spec.hp * (1 + progress * 0.55)), speed: spec.speed * (1 + progress * 0.14), damage: spec.damage, phase: Math.random() * Math.PI * 2,
-      cooldown: kind === 'cliente' ? 1.5 : 3.3, warning: 0, charge: 0, lastBlade: -5, dead: false
-    });
+    if (kind === 'responsabile') sprite.setTint(0xe9b5ff);
+    const enemy: Enemy = {
+      sprite, kind, hp: Math.round(spec.hp * (1 + progress * 0.4)),
+      speed: spec.speed * (1 + progress * 0.14), damage: spec.damage,
+      phase: Math.random() * Math.PI * 2, cooldown: kind === 'cliente' ? 1.5 : kind === 'responsabile' ? 0.65 : 3.3,
+      warning: 0, charge: 0, lastBlade: -5, dead: false
+    };
+    this.enemies.push(enemy);
+    return enemy;
   }
 
   // Homing missiles consider the director a valid enemy, not only ordinary mobs.
@@ -872,9 +802,16 @@ export class GameScene extends Phaser.Scene {
       const pos = { x: enemy.sprite.x, y: enemy.sprite.y };
       enemy.sprite.destroy();
       this.kills++;
-      const xpGain = enemy.kind === 'capo' ? 24 : enemy.kind === 'cliente' ? 14 : 10;
-      this.score += enemy.kind === 'capo' ? 30 : enemy.kind === 'cliente' ? 20 : 10;
-      if (Math.random() < 0.095 && this.health < 70) this.placeLoot('heal', pos.x, pos.y);
+      const xpGain = enemy.kind === 'responsabile' ? 140 : enemy.kind === 'capo' ? 24 : enemy.kind === 'cliente' ? 14 : 10;
+      this.score += enemy.kind === 'responsabile' ? 450 : enemy.kind === 'capo' ? 30 : enemy.kind === 'cliente' ? 20 : 10;
+      if (enemy.kind === 'responsabile' && this.currentEvent?.kind === 'manager'
+        && this.currentEvent.manager === enemy) {
+        this.grantRareReward();
+        this.endRandomEvent();
+        this.ports.onNotice('👑 RESPONSABILE SCONFITTA! PREMIO RARO');
+      } else if (Math.random() < 0.095 && this.health < 70) {
+        this.placeLoot('heal', pos.x, pos.y);
+      }
       this.awardXP(xpGain);
     } else {
       enemy.sprite.setAlpha(0.67);
@@ -954,6 +891,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private destroyDynamic(): void {
+    this.endRandomEvent(false);
     for (const enemy of this.enemies) if (enemy.sprite.active) enemy.sprite.destroy();
     for (const shot of this.shots) if (shot.sprite.active) shot.sprite.destroy();
     for (const pick of this.loot) if (pick.sprite.active) pick.sprite.destroy();
@@ -969,6 +907,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private finish(outcome: 'won' | 'lost'): void {
+    this.endRandomEvent(false);
     this.running = false;
     this.pausedRun = false;
     this.awaitingUpgrade = false;
@@ -987,6 +926,17 @@ export class GameScene extends Phaser.Scene {
       rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed)),
       bossActive: this.bossPhase === 'combat' && !!this.boss,
       bossHP: this.boss?.hp ?? 0, bossMaxHP: this.boss?.maxHP ?? 1,
+      eventTitle: this.currentEvent?.kind === 'sale' ? '🛍 SALDI AL 90%!' :
+        this.currentEvent?.kind === 'manager' ? '👑 LA RESPONSABILE' :
+        this.currentEvent?.kind === 'cart' ? '🛒 CARRELLO OFFERTE' : '',
+      eventDetail: this.currentEvent?.kind === 'sale' ? 'SOPRAVVIVI ALLA FOLLA' :
+        this.currentEvent?.kind === 'manager' ? 'SCONFIGGI IL MINIBOSS' :
+        this.currentEvent?.kind === 'cart' ? 'RACCOGLI E SCEGLI IL PREMIO' : '',
+      eventSeconds: Math.ceil(this.currentEvent?.remaining ?? 0),
+      eventFraction: this.currentEvent?.kind === 'manager' && this.currentEvent.manager
+        ? Math.max(0, this.currentEvent.manager.hp / Math.max(1, this.currentEvent.managerMaxHP ?? 1))
+        : this.currentEvent
+          ? Math.max(0, this.currentEvent.remaining / this.currentEvent.initial) : 0,
       level: this.level, xp: this.xp, xpNeeded: this.xpNeeded(),
       damageRank: this.damageRank, fireRateRank: this.fireRateRank,
       movementRank: this.movementRank, armorRank: this.armorRank
@@ -1097,6 +1047,20 @@ export class GameScene extends Phaser.Scene {
     g.lineStyle(2, 0xf8d17b); g.strokeRoundedRect(13, 7, 10, 10, 2);
     g.fillStyle(0xf9d37d); g.fillRect(18, 4, 3, 6);
     g.generateTexture('book', 32, 27); g.clear();
+
+    // Small mobile-friendly shopping trolley filled with bargain books.
+    g.fillStyle(0x21142a); g.fillRoundedRect(10, 10, 62, 51, 7);
+    g.fillStyle(0xeecb79); g.fillRoundedRect(14, 12, 54, 43, 6);
+    g.fillStyle(0xca4d6e); g.fillRoundedRect(14, 12, 54, 11, 3);
+    for (let j = 0; j < 4; j++) {
+      g.fillStyle(j % 2 ? 0x4778b0 : 0x6c438c);
+      g.fillRoundedRect(20 + j * 11, 27, 9, 22, 2);
+      g.fillStyle(0xf5e4b3); g.fillRect(24 + j * 11, 29, 2, 15);
+    }
+    g.lineStyle(5, 0x302639); g.lineBetween(14, 58, 73, 58);
+    g.fillStyle(0x272132); g.fillCircle(22, 64, 8); g.fillCircle(62, 64, 8);
+    g.fillStyle(0xffdb83); g.fillCircle(22, 64, 4); g.fillCircle(62, 64, 4);
+    g.generateTexture('offer-cart', 84, 74); g.clear();
 
     g.fillStyle(0xd7f4a8); g.fillEllipse(16, 12, 30, 15);
     g.fillStyle(0x3b5254); g.fillRoundedRect(4, 8, 22, 10, 3);
