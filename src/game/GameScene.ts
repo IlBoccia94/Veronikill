@@ -36,6 +36,7 @@ export interface GamePorts {
   onHUD: (hud: HUDState) => void;
   onEnd: (result: RunResult) => void;
   onLevelUp: (event: LevelUpChoice) => void;
+  onNotice: (message: string) => void;
 }
 
 type EnemyKind = 'commesso' | 'capo' | 'cliente';
@@ -55,7 +56,6 @@ type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
 type Boss = {
   sprite: Phaser.GameObjects.Image;
   aura: Phaser.GameObjects.Arc;
-  label: Phaser.GameObjects.Text;
   hp: number; maxHP: number; lastBlade: number;
   volleyTimer: number; ringTimer: number; dashTimer: number;
   windup: number; dashLeft: number; dashX: number; dashY: number;
@@ -65,6 +65,7 @@ type BossPhase = 'travel' | 'combat' | 'damaged' | 'fire';
 const WIDTH = 960;
 const HEIGHT = 900;
 const FINISH_X = 25000;
+const MAX_UPGRADE_LEVEL = 5;
 const ROAD_TOP = 165;
 const ROAD_BOTTOM = 735;
 
@@ -235,13 +236,13 @@ export class GameScene extends Phaser.Scene {
     ];
     return all.filter(option => {
       switch (option.id) {
-        case 'rocket': return this.rocketLevel < 3;
-        case 'blades': return this.bladeLevel < 3;
-        case 'damage': return this.damageRank < 6;
-        case 'fire-rate': return this.fireRateRank < 5;
-        case 'movement': return this.movementRank < 5;
-        case 'max-health': return this.maxHP < 200;
-        case 'armor': return this.armorRank < 4;
+        case 'rocket': return this.rocketLevel < MAX_UPGRADE_LEVEL;
+        case 'blades': return this.bladeLevel < MAX_UPGRADE_LEVEL;
+        case 'damage': return this.damageRank < MAX_UPGRADE_LEVEL - 1; // Mitra starts at level 1.
+        case 'fire-rate': return this.fireRateRank < MAX_UPGRADE_LEVEL;
+        case 'movement': return this.movementRank < MAX_UPGRADE_LEVEL;
+        case 'max-health': return this.maxHP < 100 + MAX_UPGRADE_LEVEL * 20;
+        case 'armor': return this.armorRank < MAX_UPGRADE_LEVEL;
         case 'heal': return this.health <= this.maxHP - 12;
       }
     });
@@ -249,9 +250,16 @@ export class GameScene extends Phaser.Scene {
 
   private createLevelUpChoice(): void {
     if (!this.running || this.awaitingUpgrade || this.xp < this.xpNeeded()) return;
+    const pool = this.availableUpgrades();
+    // Never pause at an empty upgrade panel after permanent upgrades are capped.
+    if (pool.length === 0) {
+      this.xp -= this.xpNeeded();
+      this.level += 1;
+      this.emitHUD();
+      return;
+    }
     this.xp -= this.xpNeeded();
     this.level += 1;
-    const pool = this.availableUpgrades();
     Phaser.Utils.Array.Shuffle(pool);
     this.offeredUpgrades = pool.slice(0, 3);
     this.awaitingUpgrade = true;
@@ -261,12 +269,13 @@ export class GameScene extends Phaser.Scene {
 
   chooseUpgrade(id: UpgradeId): boolean {
     if (!this.running || !this.awaitingUpgrade || !this.offeredUpgrades.some(option => option.id === id)) return false;
+    if (!this.availableUpgrades().some(option => option.id === id)) return false;
     switch (id) {
       case 'rocket':
-        this.rocketLevel = Math.min(3, this.rocketLevel + 1);
+        this.rocketLevel = Math.min(MAX_UPGRADE_LEVEL, this.rocketLevel + 1);
         break;
       case 'blades':
-        this.bladeLevel = Math.min(3, this.bladeLevel + 1);
+        this.bladeLevel = Math.min(MAX_UPGRADE_LEVEL, this.bladeLevel + 1);
         this.rebuildBlades();
         break;
       case 'damage':
@@ -291,6 +300,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.awaitingUpgrade = false;
     this.offeredUpgrades = [];
+    this.removeMaxedLoot();
     this.emitHUD();
     // Multiple levels gained from a single high-XP event are handled in sequence.
     this.createLevelUpChoice();
@@ -488,9 +498,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.player.x >= this.nextLootX) {
-      const pool: LootKind[] = ['rocket', 'blades', 'heal', 'shield', 'rocket', 'coffee', 'blades', 'ammo'];
+      const pool: LootKind[] = ['rocket', 'blades', 'heal', 'shield', 'rocket', 'coffee', 'blades', 'ammo']
+        .filter(kind => !this.isLootMaxed(kind));
       const type = pool[this.lootIndex % pool.length];
-      this.placeLoot(type, this.player.x + 290, randomBetween(ROAD_TOP + 90, ROAD_BOTTOM - 90));
+      if (type) this.placeLoot(type, this.player.x + 290,
+        randomBetween(ROAD_TOP + 90, ROAD_BOTTOM - 90));
       this.lootIndex++;
       this.nextLootX += 1100;
     }
@@ -575,13 +587,9 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(4, 0xf6c85e, 0.9).setDepth(18);
     const texture = this.textures.exists('enemy-capo') ? 'enemy-capo' : 'capo';
     const sprite = this.add.image(x, y, texture).setDisplaySize(154, 154).setDepth(24);
-    const label = this.add.text(x, y - 108, 'DIRETTORE GENERALE', {
-      fontFamily: 'Arial, sans-serif', fontSize: '18px', fontStyle: 'bold',
-      color: '#fff1b8', stroke: '#27162e', strokeThickness: 5
-    }).setOrigin(0.5).setDepth(25);
     const maxHP = 1800 + this.level * 115;
     this.boss = {
-      sprite, aura, label, hp: maxHP, maxHP, lastBlade: -10,
+      sprite, aura, hp: maxHP, maxHP, lastBlade: -10,
       volleyTimer: 1.0, ringTimer: 3.6, dashTimer: 4.5,
       windup: 0, dashLeft: 0, dashX: 0, dashY: 0
     };
@@ -589,7 +597,7 @@ export class GameScene extends Phaser.Scene {
     if (this.health < this.maxHP * 0.62) {
       this.placeLoot('heal', this.player.x + 72, Phaser.Math.Clamp(this.player.y + 120, ROAD_TOP + 95, ROAD_BOTTOM - 95));
     }
-    this.popText(x - 180, y - 155, 'IL DIRETTORE È ARRIVATO!', '#ffe08c');
+    this.ports.onNotice('⚠ IL DIRETTORE È ARRIVATO!');
     this.cameras.main.shake(240, 0.002);
     this.emitHUD();
   }
@@ -666,7 +674,6 @@ export class GameScene extends Phaser.Scene {
     s.y = Phaser.Math.Clamp(s.y, ROAD_TOP + 86, ROAD_BOTTOM - 86);
     s.setFlipX(this.player.x < s.x);
     boss.aura.setPosition(s.x, s.y).setScale(1 + Math.sin(this.elapsed * 4) * 0.05);
-    boss.label.setPosition(s.x, s.y - 112);
     if (distance(s, this.player) < 75) {
       this.hurtPlayer(enraged ? 23 : 17, this.player.x - s.x, this.player.y - s.y);
     }
@@ -691,11 +698,10 @@ export class GameScene extends Phaser.Scene {
     this.score += 1500;
     this.kills += 1;
     const { x, y } = boss.sprite;
-    this.popText(x, y - 65, 'DIRETTORE LICENZIATO!', '#ffe1a0');
+    this.ports.onNotice('DIRETTORE SCONFITTO!');
     this.explosion(x, y);
     boss.sprite.destroy();
     boss.aura.destroy();
-    boss.label.destroy();
     this.boss = undefined;
     this.bossWarning?.destroy();
     this.bossWarning = undefined;
@@ -724,7 +730,7 @@ export class GameScene extends Phaser.Scene {
       }
       this.spawnFinalFlames();
       this.cameras.main.shake(600, 0.006);
-      this.popText(FINISH_X + 85, HEIGHT / 2 - 135, 'FUORI CATALOGO!', '#ffc373');
+      this.ports.onNotice('LIBRERIA IN FIAMME!');
     } else if (this.bossPhase === 'fire' && !this.winTriggered) {
       this.winTriggered = true;
       this.finish('won');
@@ -753,13 +759,19 @@ export class GameScene extends Phaser.Scene {
       if (!pick.sprite.active) continue;
       pick.sprite.angle += 1;
       if (distance(pick.sprite, this.player) < 46) {
+        if (this.isLootMaxed(pick.kind)) {
+          pick.sprite.destroy();
+          continue;
+        }
         if (pick.kind === 'rocket') {
-          this.rocketLevel = Math.min(3, this.rocketLevel + 1);
-          this.popText(pick.sprite.x, pick.sprite.y, 'MISSILI LV.' + this.rocketLevel, '#c0ff79');
+          this.rocketLevel = Math.min(MAX_UPGRADE_LEVEL, this.rocketLevel + 1);
+          this.ports.onNotice('🚀 MISSILI ' + (this.rocketLevel === MAX_UPGRADE_LEVEL ? 'LIVELLO MASSIMO' : 'LV.' + this.rocketLevel));
+          this.removeMaxedLoot();
         } else if (pick.kind === 'blades') {
-          this.bladeLevel = Math.min(3, this.bladeLevel + 1);
+          this.bladeLevel = Math.min(MAX_UPGRADE_LEVEL, this.bladeLevel + 1);
           this.rebuildBlades();
-          this.popText(pick.sprite.x, pick.sprite.y, 'LAME LV.' + this.bladeLevel, '#f9a8ff');
+          this.ports.onNotice('✂ LAME ' + (this.bladeLevel === MAX_UPGRADE_LEVEL ? 'LIVELLO MASSIMO' : 'LV.' + this.bladeLevel));
+          this.removeMaxedLoot();
         } else if (pick.kind === 'heal') {
           this.health = Math.min(this.maxHP, this.health + 30);
           this.popText(pick.sprite.x, pick.sprite.y, '+30 HP', '#6affcf');
@@ -839,7 +851,6 @@ export class GameScene extends Phaser.Scene {
       const xpGain = enemy.kind === 'capo' ? 24 : enemy.kind === 'cliente' ? 14 : 10;
       this.score += enemy.kind === 'capo' ? 30 : enemy.kind === 'cliente' ? 20 : 10;
       if (Math.random() < 0.095 && this.health < 70) this.placeLoot('heal', pos.x, pos.y);
-      this.popText(pos.x, pos.y, '+' + xpGain + ' XP', '#d5f6a4');
       this.awardXP(xpGain);
     } else {
       enemy.sprite.setAlpha(0.67);
@@ -876,7 +887,20 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private isLootMaxed(kind: LootKind): boolean {
+    return (kind === 'rocket' && this.rocketLevel >= MAX_UPGRADE_LEVEL)
+      || (kind === 'blades' && this.bladeLevel >= MAX_UPGRADE_LEVEL);
+  }
+
+  private removeMaxedLoot(): void {
+    for (const pick of this.loot) {
+      if (pick.sprite.active && this.isLootMaxed(pick.kind)) pick.sprite.destroy();
+    }
+    this.loot = this.loot.filter(pick => pick.sprite.active);
+  }
+
   private placeLoot(kind: LootKind, x: number, y: number): void {
+    if (this.isLootMaxed(kind)) return;
     const imageKeys: Record<LootKind, string> = {
       rocket: 'item-missile', blades: 'item-lame', heal: 'item-cura',
       shield: 'item-scudo', coffee: 'item-caffe', ammo: 'item-munizioni'
@@ -894,12 +918,9 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, scaleX: 7, scaleY: 7, alpha: 0, duration: 240, onComplete: () => ring.destroy() });
   }
 
-  private popText(x: number, y: number, value: string, color: string): void {
-    const label = this.add.text(x, y - 25, value, {
-      fontFamily: 'Arial, sans-serif', fontSize: '19px', fontStyle: 'bold',
-      color, stroke: '#27152e', strokeThickness: 5
-    }).setOrigin(0.5).setDepth(50);
-    this.tweens.add({ targets: label, y: y - 75, alpha: 0, duration: 820, onComplete: () => label.destroy() });
+  // Toasts are rendered by the peripheral HTML HUD, not over the street.
+  private popText(_x: number, _y: number, value: string, _color: string): void {
+    this.ports.onNotice(value);
   }
 
   private cleanUp(): void {
@@ -916,7 +937,6 @@ export class GameScene extends Phaser.Scene {
     if (this.boss) {
       this.boss.sprite.destroy();
       this.boss.aura.destroy();
-      this.boss.label.destroy();
       this.boss = undefined;
     }
     this.bossWarning?.destroy();
