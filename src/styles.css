@@ -290,3 +290,9 @@ h1 { font-family: 'Barlow Condensed', Impact, sans-serif; font-size: clamp(42px,
   .event-heading { font-size: 9px; }
   .event-detail { font-size: 7px; }
 }
+
+/* Weapon evolutions glow at the bottom edge without covering the battlefield. */
+.loadout-chip.evolved {
+  background: #4b2237ee; border-color: #ffca71;
+  color: #fff0af; box-shadow: 0 0 10px #ff9b4c66, 0 2px 5px #0004;
+}

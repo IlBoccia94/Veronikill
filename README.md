@@ -4,7 +4,7 @@ Shooter arcade top-down progettato per telefono (landscape) e browser desktop. P
 
 ## Stato
 
-**Versione corrente v0.9**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta dei potenziamenti al level-up, HUD compatta sui bordi e miglioramenti fino al livello 5. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
+**Versione corrente v0.11**: shooter top-down completo del percorso da 25.000 unità, livello/XP e scelta dei potenziamenti al level-up, HUD compatta sui bordi e miglioramenti fino al livello 5. Arrivati alla libreria inizia la battaglia con il **Direttore Generale**: barra HP dedicata, raffiche, proiettili circolari, cariche telegrafate e fase furiosa. La vittoria segue soltanto alla sconfitta del boss e alla sequenza libreria intatta → danneggiata → in fiamme.
 
 **Da aggiungere**: sprite illustrato specifico del Direttore (attualmente usa lo sprite del Capo reparto, ingrandito e con aura), boomerang, effetti sonori e musica, playtesting/bilanciamento approfondito.
 
@@ -157,3 +157,12 @@ Tre eventi si alternano in ordine casuale **senza ripetizioni fino all'esaurimen
 - **🛒 Carrello delle offerte** — sprite interattivo sulla strada. Basta toccarlo per mettere in pausa il gioco e scegliere uno di massimo tre potenziamenti permanenti ancora disponibili, senza spendere XP. Il 40% delle volte, dopo la scelta, appare un'imboscata. Se tutti i potenziamenti sono massimi, il carrello offre cura/scudo.
 - **HUD** — indicatore evento piccolo in alto, con durata rimanente oppure salute del miniboss. Nessun banner centrale persistente e controlli invariati.
 - Lo stato degli eventi e le offerte sono azzerati in caso di vittoria, sconfitta o nuovo tentativo. Gli effetti temporanei e i potenziamenti rispettano il limite massimo già in vigore.
+
+## v0.11 — Evoluzioni delle armi
+
+Le tre evoluzioni sono **automatiche, permanenti e cumulabili**. Scattano non appena Veronica possiede entrambi i potenziamenti richiesti, indipendentemente dall'ordine in cui li ottiene, anche tramite pickup, il miniboss e il carrello. Nessun nuovo pickup dopo il livello massimo e nessuna scelta aggiuntiva: le ricette sono visibili nel menu iniziale e nelle descrizioni dei potenziamenti. La HUD mostra **EVO** anziché MAX per le armi trasformate.
+
+- **Bestseller Perforante**: Mitra LV.5 (quattro upgrade danno) + Cadenza LV.5. I colpi turchesi attraversano fino a **tre nemici distinti**, senza colpirne due volte uno stesso; funzionano normalmente contro il Direttore.
+- **Reso Esplosivo**: Missili LV.5 + Cadenza LV.5. Ogni raffica lancia **tre missili a ricerca** arancioni con intervallo di 2,55 secondi, raggio d'esplosione 138 contro 92 standard, più detonazioni secondarie quando un'esplosione abbatte nemici (fino a due catene brevi, senza danni duplicati). Danno diretto e compatibilità col boss invariati, con splash ridotto in caso di vicinanza.
+- **Lame Infernali**: Lame LV.5 + Movimento/Corsa LV.5. Le sei lame orbitali diventano più grandi e arancioni, ruotano a 5,3 rad/s (anziché 3,6), allargano l'orbita da 77 a 105 unità e aumentano danni e raggio di collisione. Un alone sottile indica la nuova portata.
+- Gli stati evoluti si resettano con **Gioca ancora**; collisioni, oggetti e effetti grafici della run precedente vengono ripuliti. Interfaccia compatta e comandi touch invariati.

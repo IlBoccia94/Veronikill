@@ -5,6 +5,7 @@ export type AimState = { active: boolean; angle: number };
 export type HUDState = {
   hp: number; maxHP: number; score: number; kills: number; progress: number;
   rocketLevel: number; bladeLevel: number; elapsed: number;
+  evolvedMitra: boolean; evolvedRocket: boolean; evolvedBlades: boolean;
   shieldSeconds: number; speedSeconds: number; rapidSeconds: number;
   bossActive: boolean; bossHP: number; bossMaxHP: number;
   eventTitle: string; eventDetail: string; eventSeconds: number; eventFraction: number;
@@ -52,6 +53,7 @@ type Enemy = {
 type Shot = {
   sprite: Phaser.GameObjects.Image; vx: number; vy: number; ttl: number;
   power: number; owner: 'player' | 'enemy'; rocket: boolean; dead: boolean;
+  penetrations?: number; hitEnemies?: Set<Enemy>; evolvedRocket?: boolean;
 };
 type LootKind = 'rocket' | 'blades' | 'heal' | 'shield' | 'coffee' | 'ammo';
 type Loot = { sprite: Phaser.GameObjects.Image; kind: LootKind };
@@ -112,6 +114,10 @@ export class GameScene extends Phaser.Scene {
   private rocketLevel = 0;
   private bladeLevel = 0;
   private bladeAngle = 0;
+  private evolvedMitra = false;
+  private evolvedRocket = false;
+  private evolvedBlades = false;
+  private bladeAura?: Phaser.GameObjects.Arc;
   private shieldUntil = 0;
   private speedUntil = 0;
   private rapidUntil = 0;
@@ -221,6 +227,9 @@ export class GameScene extends Phaser.Scene {
     this.rocketLevel = 0;
     this.bladeLevel = 0;
     this.bladeAngle = 0;
+    this.evolvedMitra = false;
+    this.evolvedRocket = false;
+    this.evolvedBlades = false;
     this.shieldUntil = 0;
     this.speedUntil = 0;
     this.rapidUntil = 0;
@@ -259,11 +268,11 @@ export class GameScene extends Phaser.Scene {
 
   private availableUpgrades(): UpgradeOption[] {
     const all: UpgradeOption[] = [
-      { id: 'rocket', title: 'Missili a ricerca', description: 'Sblocca o migliora i missili automatici.', icon: '🚀', rarity: 'Arma' },
-      { id: 'blades', title: 'Lame orbitanti', description: 'Più lame e più danni intorno a Veronica.', icon: '🔪', rarity: 'Arma' },
-      { id: 'damage', title: 'Proiettili rinforzati', description: '+4 danni per ogni colpo del mitra.', icon: '💥', rarity: 'Passivo' },
-      { id: 'fire-rate', title: 'Grilletto facile', description: '+12% velocità di fuoco permanente.', icon: '⚡', rarity: 'Passivo' },
-      { id: 'movement', title: 'Scarpe da corsa', description: '+7% velocità di movimento permanente.', icon: '👟', rarity: 'Passivo' },
+      { id: 'rocket', title: 'Missili a ricerca', description: 'LV.5 + Cadenza LV.5: Reso Esplosivo (tre missili e detonazioni a catena).', icon: '🚀', rarity: 'Arma' },
+      { id: 'blades', title: 'Lame orbitanti', description: 'LV.5 + Corsa LV.5: Lame Infernali (più portata e velocità).', icon: '🔪', rarity: 'Arma' },
+      { id: 'damage', title: 'Proiettili rinforzati', description: '+4 danni. Mitra LV.5 + Cadenza LV.5: Bestseller Perforante.', icon: '💥', rarity: 'Passivo' },
+      { id: 'fire-rate', title: 'Grilletto facile', description: '+12% cadenza. LV.5 sblocca evoluzioni di mitra e missili.', icon: '⚡', rarity: 'Passivo' },
+      { id: 'movement', title: 'Scarpe da corsa', description: '+7% velocità. LV.5 sblocca le Lame Infernali.', icon: '👟', rarity: 'Passivo' },
       { id: 'max-health', title: 'Copertina rigida', description: '+20 salute massima e recuperi 20 HP.', icon: '❤️', rarity: 'Passivo' },
       { id: 'armor', title: 'Recensioni blindate', description: '-12% danni subiti (cumulabile).', icon: '🛡️', rarity: 'Passivo' },
       { id: 'heal', title: 'Pausa ristoro', description: 'Recupera 40 punti salute subito.', icon: '☕', rarity: 'Recupero' }
@@ -355,6 +364,35 @@ export class GameScene extends Phaser.Scene {
         this.health = Math.min(this.maxHP, this.health + 40);
         break;
     }
+    this.checkWeaponEvolutions();
+  }
+
+  // Recipes unlock exactly once, regardless of the order in which upgrades arrive.
+  private checkWeaponEvolutions(): void {
+    const unlocked: string[] = [];
+    if (!this.evolvedMitra && this.damageRank >= MAX_UPGRADE_LEVEL - 1
+      && this.fireRateRank >= MAX_UPGRADE_LEVEL) {
+      this.evolvedMitra = true;
+      unlocked.push('🔫 BESTSELLER PERFORANTE');
+    }
+    if (!this.evolvedRocket && this.rocketLevel >= MAX_UPGRADE_LEVEL
+      && this.fireRateRank >= MAX_UPGRADE_LEVEL) {
+      this.evolvedRocket = true;
+      unlocked.push('🚀 RESO ESPLOSIVO');
+    }
+    if (!this.evolvedBlades && this.bladeLevel >= MAX_UPGRADE_LEVEL
+      && this.movementRank >= MAX_UPGRADE_LEVEL) {
+      this.evolvedBlades = true;
+      this.rebuildBlades();
+      unlocked.push('🔥 LAME INFERNALI');
+    }
+    if (!unlocked.length) return;
+    this.ports.onNotice('EVOLUZIONE! ' + unlocked.join(' + '));
+    const pulse = this.add.circle(this.player.x, this.player.y, 23, 0xffcd64, 0.18)
+      .setStrokeStyle(3, 0xffe397, 0.82).setDepth(22);
+    this.tweens.add({ targets: pulse, scale: 5, alpha: 0, duration: 500,
+      onComplete: () => pulse.destroy() });
+    this.emitHUD();
   }
 
   private awardXP(points: number): void {
@@ -446,33 +484,43 @@ export class GameScene extends Phaser.Scene {
 
     if (this.rocketLevel > 0) {
       this.missileTimer -= dt;
-      if (this.missileTimer <= 0 && this.shots.length < 140) {
-        this.missileTimer = Math.max(1.35, 3.2 - this.rocketLevel * 0.5);
-        const target = this.nearestTargetFrom(this.player, 590);
+      const volleySize = this.evolvedRocket ? 3 : 1;
+      if (this.missileTimer <= 0 && this.shots.length + volleySize <= 140) {
+        this.missileTimer = this.evolvedRocket ? 2.55 : Math.max(1.35, 3.2 - this.rocketLevel * 0.5);
+        const target = this.nearestTargetFrom(this.player, 640);
         if (target) {
           const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
-          this.addShot(this.player.x, this.player.y, angle, 350, 43 + this.rocketLevel * 15, 'player', true);
+          for (let i = 0; i < volleySize; i++) {
+            const spread = (i - (volleySize - 1) / 2) * 0.32;
+            this.addShot(this.player.x, this.player.y, angle + spread, 350,
+              43 + this.rocketLevel * 15, 'player', true);
+          }
         }
       }
     }
 
     if (this.bladeLevel > 0) {
-      this.bladeAngle += dt * 3.6;
+      this.bladeAngle += dt * (this.evolvedBlades ? 5.3 : 3.6);
+      const bladeRadius = this.evolvedBlades ? 105 : 77;
+      const hitRadius = this.evolvedBlades ? 43 : 31;
+      this.bladeAura?.setPosition(this.player.x, this.player.y);
       for (let i = 0; i < this.blades.length; i++) {
         const a = this.bladeAngle + Math.PI * 2 * i / this.blades.length;
         const blade = this.blades[i];
-        blade.setPosition(this.player.x + Math.cos(a) * 77, this.player.y + Math.sin(a) * 77).setRotation(a + Math.PI / 2);
+        blade.setPosition(this.player.x + Math.cos(a) * bladeRadius, this.player.y + Math.sin(a) * bladeRadius)
+          .setRotation(a + Math.PI / 2);
         for (const enemy of this.enemies) {
-          if (!enemy.dead && distance(blade, enemy.sprite) < 31 && this.elapsed - enemy.lastBlade > 0.38) {
+          if (!enemy.dead && distance(blade, enemy.sprite) < hitRadius
+            && this.elapsed - enemy.lastBlade > (this.evolvedBlades ? 0.27 : 0.38)) {
             enemy.lastBlade = this.elapsed;
-            this.hurtEnemy(enemy, 13 + this.bladeLevel * 7);
+            this.hurtEnemy(enemy, Math.round((13 + this.bladeLevel * 7) * (this.evolvedBlades ? 1.45 : 1)));
           }
         }
         const boss = this.boss;
-        if (this.bossPhase === 'combat' && boss && distance(blade, boss.sprite) < 82
-          && this.elapsed - boss.lastBlade > 0.30) {
+        if (this.bossPhase === 'combat' && boss && distance(blade, boss.sprite) < (this.evolvedBlades ? 96 : 82)
+          && this.elapsed - boss.lastBlade > (this.evolvedBlades ? 0.24 : 0.30)) {
           boss.lastBlade = this.elapsed;
-          this.hurtBoss(14 + this.bladeLevel * 8);
+          this.hurtBoss(Math.round((14 + this.bladeLevel * 8) * (this.evolvedBlades ? 1.4 : 1)));
         }
       }
     }
@@ -725,6 +773,40 @@ export class GameScene extends Phaser.Scene {
     this.emitHUD();
   }
 
+  // Rockets now share one AoE collision routine. The evolved volley can
+  // chain from up to two killed enemies without repeatedly damaging targets.
+  private detonateRocket(shot: Shot, directBossHit = false): void {
+    const origin = { x: shot.sprite.x, y: shot.sprite.y };
+    const radius = shot.evolvedRocket ? 138 : 92;
+    this.explosion(origin.x, origin.y);
+    const damaged = new Set<Enemy>();
+    const fallen: { x: number; y: number }[] = [];
+    for (const enemy of [...this.enemies]) {
+      if (enemy.dead || distance(origin, enemy.sprite) > radius) continue;
+      const pos = { x: enemy.sprite.x, y: enemy.sprite.y };
+      this.hurtEnemy(enemy, shot.power);
+      damaged.add(enemy);
+      if (shot.evolvedRocket && enemy.dead) fallen.push(pos);
+    }
+    if (shot.evolvedRocket) {
+      for (const pos of fallen.slice(0, 2)) {
+        const chain = this.add.circle(pos.x, pos.y, 15, 0xffa735, 0.24)
+          .setStrokeStyle(3, 0xffdf81, 0.85).setDepth(17);
+        this.tweens.add({ targets: chain, scale: 5.5, alpha: 0, duration: 240,
+          onComplete: () => chain.destroy() });
+        for (const enemy of [...this.enemies]) {
+          if (enemy.dead || damaged.has(enemy) || distance(pos, enemy.sprite) > 105) continue;
+          damaged.add(enemy);
+          this.hurtEnemy(enemy, Math.round(shot.power * 0.55));
+        }
+      }
+      if (!directBossHit && this.bossPhase === 'combat' && this.boss
+        && distance(origin, this.boss.sprite) < radius) {
+        this.hurtBoss(Math.round(shot.power * 0.35));
+      }
+    }
+  }
+
   private updateShots(dt: number): void {
     for (const shot of this.shots) {
       if (shot.dead) continue;
@@ -758,23 +840,28 @@ export class GameScene extends Phaser.Scene {
         const boss = this.boss;
         if (this.bossPhase === 'combat' && boss && distance(shot.sprite, boss.sprite) < (shot.rocket ? 76 : 65)) {
           this.hurtBoss(shot.power);
-          if (shot.rocket) this.explosion(shot.sprite.x, shot.sprite.y);
+          if (shot.rocket) this.detonateRocket(shot, true);
           shot.dead = true;
           shot.sprite.destroy();
           continue;
         }
         for (const enemy of this.enemies) {
-          if (enemy.dead) continue;
+          if (enemy.dead || shot.hitEnemies?.has(enemy)) continue;
           if (distance(shot.sprite, enemy.sprite) < (shot.rocket ? 28 : enemy.kind === 'capo' ? 31 : 24)) {
             if (shot.rocket) {
-              for (const other of this.enemies) {
-                if (!other.dead && distance(shot.sprite, other.sprite) < 92) this.hurtEnemy(other, shot.power);
-              }
-              this.explosion(shot.sprite.x, shot.sprite.y);
-            } else {
-              this.hurtEnemy(enemy, shot.power);
+              this.detonateRocket(shot);
+              shot.dead = true;
+              shot.sprite.destroy();
+              break;
             }
-            shot.dead = true; shot.sprite.destroy();
+            shot.hitEnemies?.add(enemy);
+            this.hurtEnemy(enemy, shot.power);
+            if (shot.penetrations && shot.penetrations > 1) {
+              shot.penetrations--;
+              continue; // Keep flying, but do not hit this same enemy again.
+            }
+            shot.dead = true;
+            shot.sprite.destroy();
             break;
           }
         }
@@ -1006,6 +1093,7 @@ export class GameScene extends Phaser.Scene {
           this.rapidUntil = Math.max(this.rapidUntil, this.elapsed) + 8;
           this.popText(pick.sprite.x, pick.sprite.y, 'RAFFICA 8s', '#ffd37f');
         }
+        this.checkWeaponEvolutions(); // Weapon drops can complete a recipe too.
         pick.sprite.destroy();
         this.emitHUD();
       }
@@ -1019,9 +1107,16 @@ export class GameScene extends Phaser.Scene {
     const texture = rocket ? 'rocket' : owner === 'enemy' ? enemyProjectile : 'bullet';
     const sprite = this.add.image(x, y, texture)
       .setRotation(angle).setDepth(15);
+    const piercing = owner === 'player' && !rocket && this.evolvedMitra;
+    const megaRocket = owner === 'player' && rocket && this.evolvedRocket;
+    if (piercing) sprite.setTint(0xb8fffb).setScale(1.30);
+    if (megaRocket) sprite.setTint(0xff9e49).setScale(1.24);
     this.shots.push({
       sprite, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-      power, owner, rocket, ttl: rocket ? 2.4 : 1.25, dead: false
+      power, owner, rocket, ttl: rocket ? (megaRocket ? 2.8 : 2.4) : 1.25, dead: false,
+      penetrations: piercing ? 3 : undefined,
+      hitEnemies: piercing ? new Set<Enemy>() : undefined,
+      evolvedRocket: megaRocket
     });
   }
 
@@ -1117,10 +1212,17 @@ export class GameScene extends Phaser.Scene {
   private rebuildBlades(): void {
     for (const blade of this.blades) blade.destroy();
     this.blades = [];
+    this.bladeAura?.destroy();
+    this.bladeAura = undefined;
+    if (this.evolvedBlades) {
+      this.bladeAura = this.add.circle(this.player.x, this.player.y, 109, 0xff7130, 0.03)
+        .setStrokeStyle(2, 0xffb14d, 0.24).setDepth(20);
+    }
     for (let i = 0; i < 1 + this.bladeLevel; i++) {
       const texture = this.textures.exists('item-lame') ? 'item-lame' : 'blade';
       const blade = this.add.image(this.player.x, this.player.y, texture).setDepth(21);
-      if (texture !== 'blade') blade.setScale(37 / Math.max(blade.width, blade.height));
+      if (texture !== 'blade') blade.setScale((this.evolvedBlades ? 52 : 37) / Math.max(blade.width, blade.height));
+      if (this.evolvedBlades) blade.setTint(0xffa14f);
       this.blades.push(blade);
     }
   }
@@ -1173,6 +1275,8 @@ export class GameScene extends Phaser.Scene {
     for (const shot of this.shots) if (shot.sprite.active) shot.sprite.destroy();
     for (const pick of this.loot) if (pick.sprite.active) pick.sprite.destroy();
     for (const blade of this.blades) if (blade.active) blade.destroy();
+    this.bladeAura?.destroy();
+    this.bladeAura = undefined;
     if (this.boss) {
       this.boss.sprite.destroy();
       this.boss.aura.destroy();
@@ -1198,6 +1302,7 @@ export class GameScene extends Phaser.Scene {
       hp: this.health, maxHP: this.maxHP, score: this.score, kills: this.kills,
       progress: Math.min(100, Math.round(this.player ? this.player.x / FINISH_X * 100 : 0)),
       rocketLevel: this.rocketLevel, bladeLevel: this.bladeLevel, elapsed: this.elapsed,
+      evolvedMitra: this.evolvedMitra, evolvedRocket: this.evolvedRocket, evolvedBlades: this.evolvedBlades,
       shieldSeconds: Math.max(0, Math.ceil(this.shieldUntil - this.elapsed)),
       speedSeconds: Math.max(0, Math.ceil(this.speedUntil - this.elapsed)),
       rapidSeconds: Math.max(0, Math.ceil(this.rapidUntil - this.elapsed)),

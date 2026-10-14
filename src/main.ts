@@ -88,16 +88,18 @@ function showNotice(message: string): void {
   }, 1500);
 }
 
-type LoadoutChip = { icon: string; name: string; rank?: number; temporary?: boolean };
+type LoadoutChip = { icon: string; name: string; rank?: number; temporary?: boolean; evolved?: boolean };
 const MAX_WEAPON_LEVEL = 5;
 function renderLoadout(chips: LoadoutChip[]): void {
   const nodes = chips.map(chip => {
     const el = document.createElement('span');
     const maxed = chip.rank === MAX_WEAPON_LEVEL;
-    el.className = 'loadout-chip' + (maxed ? ' maxed' : '') + (chip.temporary ? ' temporary' : '');
+    el.className = 'loadout-chip' + (maxed ? ' maxed' : '') +
+      (chip.temporary ? ' temporary' : '') + (chip.evolved ? ' evolved' : '');
     el.textContent = chip.icon + ' ' + chip.name +
-      (chip.rank !== undefined ? ' ' + (maxed ? 'MAX' : chip.rank + '/5') : '');
-    if (maxed) el.title = chip.name + ' - LIVELLO MASSIMO';
+      (chip.evolved ? ' EVO' : chip.rank !== undefined ? ' ' + (maxed ? 'MAX' : chip.rank + '/5') : '');
+    if (chip.evolved) el.title = chip.name + ' - ARMA EVOLUTA';
+    else if (maxed) el.title = chip.name + ' - LIVELLO MASSIMO';
     return el;
   });
   loadout.replaceChildren(...nodes);
@@ -220,10 +222,13 @@ const scene = new GameScene({
     levelText.textContent = 'LIV. ' + data.level;
     // Bottom-center inventory strip; never render a full line across the arena.
     const chips: LoadoutChip[] = [
-      { icon: '🔫', name: 'MITRA', rank: 1 + data.damageRank }
+      { icon: '🔫', name: data.evolvedMitra ? 'PERFORANTE' : 'MITRA',
+        rank: 1 + data.damageRank, evolved: data.evolvedMitra }
     ];
-    if (data.rocketLevel) chips.push({ icon: '🚀', name: 'MISSILI', rank: data.rocketLevel });
-    if (data.bladeLevel) chips.push({ icon: '✂', name: 'LAME', rank: data.bladeLevel });
+    if (data.rocketLevel) chips.push({ icon: '🚀', name: data.evolvedRocket ? 'RESO' : 'MISSILI',
+      rank: data.rocketLevel, evolved: data.evolvedRocket });
+    if (data.bladeLevel) chips.push({ icon: '🔥', name: data.evolvedBlades ? 'INFERNALI' : 'LAME',
+      rank: data.bladeLevel, evolved: data.evolvedBlades });
     if (data.fireRateRank) chips.push({ icon: '⚡', name: 'CADENZA', rank: data.fireRateRank });
     if (data.movementRank) chips.push({ icon: '👟', name: 'CORSA', rank: data.movementRank });
     if (data.armorRank) chips.push({ icon: '🛡', name: 'DIFESA', rank: data.armorRank });
